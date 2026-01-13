@@ -13,6 +13,8 @@ struct WeeklyGoalsView: View {
     @State private var editingNotesGoal: Goal?
     @State private var notesText = ""
     @State private var draggedGoal: Goal?
+    @State private var justCompletedGoalId: UUID?
+    @State private var pulsingAddButton: GoalCategory?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -94,23 +96,10 @@ struct WeeklyGoalsView: View {
                     .fill(CyberTheme.gridLine)
                     .frame(height: 1)
 
-                // Add button for this category
-                Button(action: {
+                // Add button for this category with hover glow
+                AddCategoryButton(category: category, color: categoryColor(category)) {
                     addGoalCategory = category
                     showAddGoal = true
-                }) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundColor(categoryColor(category))
-                        .frame(width: 20, height: 20)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4)
-                                .stroke(categoryColor(category).opacity(0.5), lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
-                .onHover { hovering in
-                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                 }
             }
 
@@ -121,20 +110,44 @@ struct WeeklyGoalsView: View {
                 }) {
                     HStack {
                         Spacer()
-                        VStack(spacing: 6) {
-                            Image(systemName: "plus.viewfinder")
-                                .font(.system(size: 18, design: .monospaced))
-                                .foregroundColor(CyberTheme.dimGreen)
+                        VStack(spacing: 8) {
+                            ZStack {
+                                // Subtle pulsing background
+                                Circle()
+                                    .fill(categoryColor(category).opacity(0.1))
+                                    .frame(width: 44, height: 44)
+                                    .scaleEffect(pulsingAddButton == category ? 1.2 : 1.0)
+                                    .opacity(pulsingAddButton == category ? 0 : 0.5)
+
+                                Circle()
+                                    .stroke(categoryColor(category).opacity(0.3), lineWidth: 1)
+                                    .frame(width: 36, height: 36)
+
+                                Image(systemName: "plus")
+                                    .font(.system(size: 16, weight: .medium, design: .monospaced))
+                                    .foregroundColor(categoryColor(category))
+                            }
+
                             Text("ADD_OBJECTIVE")
                                 .font(.system(size: 9, weight: .medium, design: .monospaced))
                                 .foregroundColor(CyberTheme.textSecondary)
                         }
-                        .padding(.vertical, 12)
+                        .padding(.vertical, 16)
                         Spacer()
                     }
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(categoryColor(category).opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    )
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .onAppear {
+                    // Start pulse animation
+                    withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                        pulsingAddButton = category
+                    }
+                }
                 .onHover { hovering in
                     if hovering {
                         NSCursor.pointingHand.push()
@@ -166,6 +179,8 @@ struct WeeklyGoalsView: View {
     private func goalRow(_ goal: Goal, category: GoalCategory, allGoals: [Goal]) -> some View {
         let isHovered = hoveredGoalId == goal.id
         let isExpanded = expandedGoalIds.contains(goal.id ?? UUID())
+        let isDragging = draggedGoal?.id == goal.id
+        let justCompleted = justCompletedGoalId == goal.id
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
@@ -174,15 +189,25 @@ struct WeeklyGoalsView: View {
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundColor(isHovered ? CyberTheme.textSecondary : CyberTheme.dimGreen)
                     .frame(width: 16)
+                    .scaleEffect(isDragging ? 1.1 : 1.0)
                     .onHover { hovering in
                         if hovering { NSCursor.openHand.push() } else { NSCursor.pop() }
                     }
 
-                // Cyberpunk checkbox
+                // Cyberpunk checkbox with completion animation
                 Button {
                     toggleGoal(goal)
                 } label: {
                     ZStack {
+                        // Outer glow ring on completion
+                        if justCompleted {
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(categoryColor(category), lineWidth: 2)
+                                .frame(width: 26, height: 26)
+                                .opacity(justCompleted ? 0 : 1)
+                                .scaleEffect(justCompleted ? 1.5 : 1.0)
+                        }
+
                         RoundedRectangle(cornerRadius: 4)
                             .stroke(goal.isCompleted ? Color.clear : categoryColor(category).opacity(0.5), lineWidth: 1.5)
                             .frame(width: 20, height: 20)
@@ -191,13 +216,15 @@ struct WeeklyGoalsView: View {
                             RoundedRectangle(cornerRadius: 4)
                                 .fill(categoryColor(category))
                                 .frame(width: 20, height: 20)
-                                .shadow(color: categoryColor(category).opacity(0.6), radius: 4, x: 0, y: 0)
+                                .shadow(color: categoryColor(category).opacity(0.8), radius: justCompleted ? 8 : 4, x: 0, y: 0)
 
                             Image(systemName: "checkmark")
                                 .font(.system(size: 10, weight: .black, design: .monospaced))
                                 .foregroundColor(CyberTheme.background)
+                                .scaleEffect(justCompleted ? 1.2 : 1.0)
                         }
                     }
+                    .scaleEffect(justCompleted ? 1.1 : 1.0)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -276,35 +303,36 @@ struct WeeklyGoalsView: View {
                     if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                 }
 
-                // Delete button (only on hover)
-                if isHovered {
-                    Button(action: { deleteGoal(goal) }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundColor(CyberTheme.neonMagenta.opacity(0.7))
-                            .frame(width: 20, height: 20)
-                            .background(
-                                RoundedRectangle(cornerRadius: 3)
-                                    .stroke(CyberTheme.neonMagenta.opacity(0.3), lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .transition(.opacity)
-                    .onHover { hovering in
-                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                    }
+                // Delete button (only on hover) with smooth transition
+                Button(action: { deleteGoal(goal) }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(CyberTheme.neonMagenta.opacity(0.7))
+                        .frame(width: 20, height: 20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 3)
+                                .stroke(CyberTheme.neonMagenta.opacity(0.3), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .opacity(isHovered ? 1 : 0)
+                .scaleEffect(isHovered ? 1 : 0.8)
+                .animation(.easeOut(duration: 0.15), value: isHovered)
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                 }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
 
-            // Expandable notes section
+            // Expandable notes section with smooth animation
             if isExpanded {
                 VStack(alignment: .leading, spacing: 8) {
                     Rectangle()
                         .fill(CyberTheme.gridLine)
                         .frame(height: 1)
                         .padding(.horizontal, 10)
+                        .transition(.opacity)
 
                     if editingNotesGoal?.id == goal.id {
                         // Editing notes
@@ -409,6 +437,11 @@ struct WeeklyGoalsView: View {
                     lineWidth: 1
                 )
         )
+        // Drag state visual feedback
+        .opacity(isDragging ? 0.6 : 1.0)
+        .scaleEffect(isDragging ? 1.02 : 1.0)
+        .shadow(color: isDragging ? categoryColor(category).opacity(0.3) : Color.clear, radius: 8, x: 0, y: 4)
+        .animation(.easeInOut(duration: 0.2), value: isDragging)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 hoveredGoalId = hovering ? goal.id : nil
@@ -417,8 +450,24 @@ struct WeeklyGoalsView: View {
     }
 
     private func toggleGoal(_ goal: Goal) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        let wasCompleted = goal.isCompleted
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
             dataService.toggleGoalCompletion(goal)
+
+            // Trigger completion celebration if completing (not uncompleting)
+            if !wasCompleted {
+                justCompletedGoalId = goal.id
+            }
+        }
+
+        // Reset the celebration state after animation
+        if !wasCompleted {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    justCompletedGoalId = nil
+                }
+            }
         }
     }
 
@@ -513,5 +562,39 @@ struct GoalDropDelegate: DropDelegate {
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
         return DropProposal(operation: .move)
+    }
+}
+
+// MARK: - Polished Add Button with Hover Glow
+struct AddCategoryButton: View {
+    let category: GoalCategory
+    let color: Color
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(color)
+                .frame(width: 20, height: 20)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(isHovered ? color.opacity(0.15) : Color.clear)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(color.opacity(isHovered ? 0.8 : 0.5), lineWidth: 1)
+                )
+                .shadow(color: isHovered ? color.opacity(0.5) : Color.clear, radius: 4, x: 0, y: 0)
+                .scaleEffect(isHovered ? 1.1 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .animation(.easeOut(duration: 0.15), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
     }
 }

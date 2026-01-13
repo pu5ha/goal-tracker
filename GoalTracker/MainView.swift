@@ -9,6 +9,7 @@ struct MainView: View {
     @State private var showAddEvent = false
     @State private var showSettings = false
     @State private var selectedTab: MainTab = .calendar
+    @State private var hoveredButton: String?
 
     enum MainTab: String, CaseIterable {
         case calendar = "CALENDAR"
@@ -81,11 +82,19 @@ struct MainView: View {
                         .frame(width: 32, height: 32)
                         .background(
                             RoundedRectangle(cornerRadius: 6)
-                                .stroke(CyberTheme.matrixGreen.opacity(0.5), lineWidth: 1)
+                                .fill(hoveredButton == "prev" ? CyberTheme.matrixGreen.opacity(0.1) : Color.clear)
                         )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(CyberTheme.matrixGreen.opacity(hoveredButton == "prev" ? 0.8 : 0.5), lineWidth: 1)
+                        )
+                        .shadow(color: hoveredButton == "prev" ? CyberTheme.matrixGreen.opacity(0.4) : Color.clear, radius: 6, x: 0, y: 0)
+                        .scaleEffect(hoveredButton == "prev" ? 1.05 : 1.0)
                 }
                 .buttonStyle(.plain)
+                .animation(.easeOut(duration: 0.15), value: hoveredButton)
                 .onHover { hovering in
+                    hoveredButton = hovering ? "prev" : nil
                     if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                 }
 
@@ -105,11 +114,19 @@ struct MainView: View {
                         .frame(width: 32, height: 32)
                         .background(
                             RoundedRectangle(cornerRadius: 6)
-                                .stroke(CyberTheme.matrixGreen.opacity(0.5), lineWidth: 1)
+                                .fill(hoveredButton == "next" ? CyberTheme.matrixGreen.opacity(0.1) : Color.clear)
                         )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(CyberTheme.matrixGreen.opacity(hoveredButton == "next" ? 0.8 : 0.5), lineWidth: 1)
+                        )
+                        .shadow(color: hoveredButton == "next" ? CyberTheme.matrixGreen.opacity(0.4) : Color.clear, radius: 6, x: 0, y: 0)
+                        .scaleEffect(hoveredButton == "next" ? 1.05 : 1.0)
                 }
                 .buttonStyle(.plain)
+                .animation(.easeOut(duration: 0.15), value: hoveredButton)
                 .onHover { hovering in
+                    hoveredButton = hovering ? "next" : nil
                     if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                 }
 
@@ -154,10 +171,13 @@ struct MainView: View {
                     .background(CyberTheme.matrixGreen)
                     .foregroundColor(CyberTheme.background)
                     .cornerRadius(4)
-                    .shadow(color: CyberTheme.matrixGreen.opacity(0.5), radius: 8, x: 0, y: 0)
+                    .shadow(color: CyberTheme.matrixGreen.opacity(hoveredButton == "goal" ? 0.8 : 0.5), radius: hoveredButton == "goal" ? 12 : 8, x: 0, y: 0)
+                    .scaleEffect(hoveredButton == "goal" ? 1.03 : 1.0)
                 }
                 .buttonStyle(.plain)
+                .animation(.easeOut(duration: 0.15), value: hoveredButton)
                 .onHover { hovering in
+                    hoveredButton = hovering ? "goal" : nil
                     if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                 }
 
@@ -170,31 +190,43 @@ struct MainView: View {
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
-                    .background(CyberTheme.cardBackground)
+                    .background(hoveredButton == "event" ? CyberTheme.neonCyan.opacity(0.15) : CyberTheme.cardBackground)
                     .foregroundColor(CyberTheme.neonCyan)
                     .cornerRadius(4)
                     .overlay(
                         RoundedRectangle(cornerRadius: 4)
-                            .stroke(CyberTheme.neonCyan.opacity(0.5), lineWidth: 1)
+                            .stroke(CyberTheme.neonCyan.opacity(hoveredButton == "event" ? 0.8 : 0.5), lineWidth: 1)
                     )
+                    .shadow(color: hoveredButton == "event" ? CyberTheme.neonCyan.opacity(0.4) : Color.clear, radius: 6, x: 0, y: 0)
+                    .scaleEffect(hoveredButton == "event" ? 1.03 : 1.0)
                 }
                 .buttonStyle(.plain)
+                .animation(.easeOut(duration: 0.15), value: hoveredButton)
                 .onHover { hovering in
+                    hoveredButton = hovering ? "event" : nil
                     if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                 }
 
                 Button(action: { showSettings = true }) {
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 12, weight: .medium, design: .monospaced))
-                        .foregroundColor(CyberTheme.textSecondary)
+                        .foregroundColor(hoveredButton == "settings" ? CyberTheme.textPrimary : CyberTheme.textSecondary)
                         .frame(width: 32, height: 32)
                         .background(
                             RoundedRectangle(cornerRadius: 4)
+                                .fill(hoveredButton == "settings" ? CyberTheme.gridLine.opacity(0.3) : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
                                 .stroke(CyberTheme.gridLine, lineWidth: 1)
                         )
+                        .scaleEffect(hoveredButton == "settings" ? 1.05 : 1.0)
+                        .rotationEffect(.degrees(hoveredButton == "settings" ? 45 : 0))
                 }
                 .buttonStyle(.plain)
+                .animation(.easeOut(duration: 0.2), value: hoveredButton)
                 .onHover { hovering in
+                    hoveredButton = hovering ? "settings" : nil
                     if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                 }
             }
