@@ -16,14 +16,22 @@ class DataService: ObservableObject {
 
     // MARK: - Goal Operations
 
-    func createGoal(title: String, category: GoalCategory, weekStart: Date? = nil) -> Goal {
+    func createGoal(title: String, category: GoalCategory, weekStart: Date? = nil, notes: String? = nil) -> Goal {
+        let targetWeekStart = weekStart ?? weekService.currentWeekStart
+
+        // Get the next sort order for this category
+        let existingGoals = getGoalsByCategory(for: targetWeekStart)[category] ?? []
+        let maxSortOrder = existingGoals.map { $0.sortOrder }.max() ?? -1
+
         let goal = Goal(context: context)
         goal.id = UUID()
         goal.title = title
         goal.category = category.rawValue
         goal.isCompleted = false
-        goal.weekStart = weekStart ?? weekService.currentWeekStart
+        goal.weekStart = targetWeekStart
         goal.createdAt = Date()
+        goal.notes = notes
+        goal.sortOrder = maxSortOrder + 1
         save()
         return goal
     }
@@ -33,6 +41,7 @@ class DataService: ObservableObject {
         request.predicate = NSPredicate(format: "weekStart == %@", weekStart as NSDate)
         request.sortDescriptors = [
             NSSortDescriptor(keyPath: \Goal.category, ascending: true),
+            NSSortDescriptor(keyPath: \Goal.sortOrder, ascending: true),
             NSSortDescriptor(keyPath: \Goal.createdAt, ascending: true)
         ]
 
@@ -68,6 +77,29 @@ class DataService: ObservableObject {
 
     func updateGoalTitle(_ goal: Goal, title: String) {
         goal.title = title
+        save()
+    }
+
+    func updateGoalNotes(_ goal: Goal, notes: String) {
+        goal.notes = notes.isEmpty ? nil : notes
+        save()
+    }
+
+    func reorderGoals(_ goals: [Goal], in category: GoalCategory) {
+        for (index, goal) in goals.enumerated() {
+            goal.sortOrder = Int16(index)
+        }
+        save()
+    }
+
+    func moveGoal(_ goal: Goal, from sourceIndex: Int, to destinationIndex: Int, in goals: [Goal]) {
+        var mutableGoals = goals
+        mutableGoals.remove(at: sourceIndex)
+        mutableGoals.insert(goal, at: destinationIndex)
+
+        for (index, g) in mutableGoals.enumerated() {
+            g.sortOrder = Int16(index)
+        }
         save()
     }
 
@@ -142,6 +174,8 @@ class DataService: ObservableObject {
                 newGoal.weekStart = currentWeekStart
                 newGoal.createdAt = Date()
                 newGoal.rolledOverFrom = goal.id
+                newGoal.notes = goal.notes
+                newGoal.sortOrder = goal.sortOrder
             }
 
             save()

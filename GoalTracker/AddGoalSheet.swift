@@ -8,6 +8,8 @@ struct AddGoalSheet: View {
 
     @State private var title = ""
     @State private var selectedCategory: GoalCategory = .personal
+    @State private var notes = ""
+    @State private var showNotes = false
     @FocusState private var isTitleFocused: Bool
 
     var body: some View {
@@ -81,6 +83,45 @@ struct AddGoalSheet: View {
                         ForEach(GoalCategory.allCases) { category in
                             categoryButton(category)
                         }
+                    }
+                }
+
+                // Notes Section (collapsible)
+                VStack(alignment: .leading, spacing: 10) {
+                    Button(action: { withAnimation { showNotes.toggle() } }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: showNotes ? "chevron.down" : "chevron.right")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            Text("> ADD_NOTES (OPTIONAL)")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            if !notes.isEmpty {
+                                Circle()
+                                    .fill(CyberTheme.neonCyan)
+                                    .frame(width: 6, height: 6)
+                            }
+                        }
+                        .foregroundColor(CyberTheme.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    }
+
+                    if showNotes {
+                        TextEditor(text: $notes)
+                            .font(.system(size: 12, design: .monospaced))
+                            .scrollContentBackground(.hidden)
+                            .foregroundColor(CyberTheme.textPrimary)
+                            .frame(minHeight: 60, maxHeight: 100)
+                            .padding(10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(CyberTheme.cardBackground)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(CyberTheme.gridLine, lineWidth: 1)
+                            )
                     }
                 }
 
@@ -192,7 +233,7 @@ struct AddGoalSheet: View {
 
     private func addGoal() {
         guard !title.isEmpty else { return }
-        _ = dataService.createGoal(title: title, category: selectedCategory, weekStart: weekStart)
+        _ = dataService.createGoal(title: title, category: selectedCategory, weekStart: weekStart, notes: notes.isEmpty ? nil : notes)
         dismiss()
     }
 }

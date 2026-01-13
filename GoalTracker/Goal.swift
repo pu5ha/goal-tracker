@@ -20,6 +20,8 @@ extension Goal {
     @NSManaged public var completedAt: Date?
     @NSManaged public var rolledOverFrom: UUID?
     @NSManaged public var focusDate: Date?
+    @NSManaged public var notes: String?
+    @NSManaged public var sortOrder: Int16
 }
 
 // MARK: - Convenience Properties
@@ -30,6 +32,14 @@ extension Goal {
 
     var unwrappedCategory: String {
         category ?? "Personal"
+    }
+
+    var unwrappedNotes: String {
+        notes ?? ""
+    }
+
+    var hasNotes: Bool {
+        !(notes ?? "").isEmpty
     }
 
     var goalCategory: GoalCategory {
