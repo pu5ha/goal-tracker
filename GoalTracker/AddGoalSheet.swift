@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AddGoalSheet: View {
     let weekStart: Date
+    var initialCategory: GoalCategory? = nil
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var dataService = DataService.shared
 
@@ -146,6 +147,9 @@ struct AddGoalSheet: View {
         .frame(width: 450, height: 400)
         .background(CyberTheme.background)
         .onAppear {
+            if let category = initialCategory {
+                selectedCategory = category
+            }
             isTitleFocused = true
         }
     }

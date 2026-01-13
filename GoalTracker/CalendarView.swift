@@ -1,5 +1,6 @@
 import SwiftUI
 import EventKit
+import Combine
 
 // Wrapper to make EKEvent work with sheet(item:)
 struct IdentifiableEvent: Identifiable {
@@ -20,8 +21,10 @@ struct CalendarView: View {
     @State private var eventToEdit: IdentifiableEvent?
     @State private var showAddEvent = false
     @State private var addEventDate: Date = Date()
+    @State private var currentTime = Date()
 
     private let weekService = WeekService.shared
+    private let timeUpdateTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     // Only show today and future days for current/future weeks
     // For past weeks, show all days
@@ -39,9 +42,22 @@ struct CalendarView: View {
         }
     }
 
+    // Next upcoming event
+    private var nextEvent: EKEvent? {
+        let now = Date()
+        return events
+            .filter { $0.startDate > now }
+            .sorted { $0.startDate < $1.startDate }
+            .first
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if calendarService.hasAccess {
+                // Next meeting banner
+                if let next = nextEvent {
+                    nextMeetingBanner(next)
+                }
                 calendarGrid
             } else {
                 noAccessView
@@ -50,6 +66,9 @@ struct CalendarView: View {
         .background(CyberTheme.background)
         .onAppear(perform: loadEvents)
         .onChange(of: weekStart) { _ in loadEvents() }
+        .onReceive(timeUpdateTimer) { _ in
+            currentTime = Date()
+        }
         .sheet(item: $eventToEdit) { identifiableEvent in
             EditEventSheet(event: identifiableEvent.event, calendarService: calendarService) {
                 loadEvents()
@@ -57,6 +76,93 @@ struct CalendarView: View {
         }
         .sheet(isPresented: $showAddEvent) {
             AddEventSheet(selectedDate: addEventDate, calendarService: calendarService)
+        }
+    }
+
+    private func nextMeetingBanner(_ event: EKEvent) -> some View {
+        let eventColor = Color(nsColor: event.calendarColor)
+        let timeUntil = timeUntilEvent(event)
+
+        return HStack(spacing: 12) {
+            // Pulsing indicator
+            Circle()
+                .fill(eventColor)
+                .frame(width: 8, height: 8)
+                .shadow(color: eventColor.opacity(0.8), radius: 4, x: 0, y: 0)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("// NEXT_EVENT")
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .foregroundColor(CyberTheme.textSecondary)
+
+                Text(event.title ?? "UNTITLED")
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundColor(CyberTheme.textPrimary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(event.formattedStartTime.uppercased())
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(eventColor)
+
+                Text(timeUntil)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundColor(CyberTheme.textSecondary)
+            }
+
+            // Quick action to view
+            Button(action: { eventToEdit = IdentifiableEvent(event) }) {
+                Image(systemName: "arrow.right.circle.fill")
+                    .font(.system(size: 16, design: .monospaced))
+                    .foregroundColor(eventColor)
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 0)
+                .fill(eventColor.opacity(0.1))
+        )
+        .overlay(
+            Rectangle()
+                .fill(eventColor)
+                .frame(width: 3),
+            alignment: .leading
+        )
+        .overlay(
+            Rectangle()
+                .frame(height: 1)
+                .foregroundColor(eventColor.opacity(0.3)),
+            alignment: .bottom
+        )
+    }
+
+    private func timeUntilEvent(_ event: EKEvent) -> String {
+        let now = Date()
+        let interval = event.startDate.timeIntervalSince(now)
+
+        if interval < 60 {
+            return "STARTING NOW"
+        } else if interval < 3600 {
+            let minutes = Int(interval / 60)
+            return "IN \(minutes) MIN"
+        } else if interval < 86400 {
+            let hours = Int(interval / 3600)
+            let minutes = Int((interval.truncatingRemainder(dividingBy: 3600)) / 60)
+            if minutes > 0 {
+                return "IN \(hours)H \(minutes)M"
+            }
+            return "IN \(hours) HOUR\(hours > 1 ? "S" : "")"
+        } else {
+            let days = Int(interval / 86400)
+            return "IN \(days) DAY\(days > 1 ? "S" : "")"
         }
     }
 
@@ -124,24 +230,60 @@ struct CalendarView: View {
         return VStack(spacing: 0) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
-                    ForEach(dayEvents, id: \.eventIdentifier) { event in
-                        eventCard(event)
-                            .onTapGesture {
-                                eventToEdit = IdentifiableEvent(event)
-                            }
-                    }
+                    if isToday {
+                        // Split events into past and future, insert time indicator between
+                        let (pastEvents, futureEvents) = splitEventsByCurrentTime(dayEvents)
 
-                    if dayEvents.isEmpty {
-                        VStack(spacing: 4) {
-                            Text("--")
-                                .font(.system(size: 12, design: .monospaced))
-                                .foregroundColor(CyberTheme.dimGreen)
-                            Text("NO_EVENTS")
-                                .font(.system(size: 8, design: .monospaced))
-                                .foregroundColor(CyberTheme.textSecondary.opacity(0.5))
+                        ForEach(pastEvents, id: \.eventIdentifier) { event in
+                            eventCard(event, isPast: true)
+                                .onTapGesture {
+                                    eventToEdit = IdentifiableEvent(event)
+                                }
+                                .onHover { hovering in
+                                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                }
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 20)
+
+                        // Current time indicator in the middle
+                        currentTimeIndicator
+
+                        ForEach(futureEvents, id: \.eventIdentifier) { event in
+                            eventCard(event, isPast: false)
+                                .onTapGesture {
+                                    eventToEdit = IdentifiableEvent(event)
+                                }
+                                .onHover { hovering in
+                                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                }
+                        }
+
+                        if dayEvents.isEmpty {
+                            currentTimeIndicator
+                            Spacer().frame(height: 10)
+                        }
+                    } else {
+                        ForEach(dayEvents, id: \.eventIdentifier) { event in
+                            eventCard(event, isPast: false)
+                                .onTapGesture {
+                                    eventToEdit = IdentifiableEvent(event)
+                                }
+                                .onHover { hovering in
+                                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                }
+                        }
+
+                        if dayEvents.isEmpty {
+                            VStack(spacing: 4) {
+                                Text("--")
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .foregroundColor(CyberTheme.dimGreen)
+                                Text("NO_EVENTS")
+                                    .font(.system(size: 8, design: .monospaced))
+                                    .foregroundColor(CyberTheme.textSecondary.opacity(0.5))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 20)
+                        }
                     }
                 }
                 .padding(6)
@@ -170,6 +312,9 @@ struct CalendarView: View {
                 )
             }
             .buttonStyle(.plain)
+            .onHover { hovering in
+                if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(isToday ? CyberTheme.matrixGreen.opacity(0.03) : Color.clear)
@@ -181,18 +326,55 @@ struct CalendarView: View {
         )
     }
 
-    private func eventCard(_ event: EKEvent) -> some View {
+    private func splitEventsByCurrentTime(_ events: [EKEvent]) -> ([EKEvent], [EKEvent]) {
+        let now = currentTime
+        let pastEvents = events.filter { $0.endDate <= now }
+        let futureEvents = events.filter { $0.endDate > now }
+        return (pastEvents, futureEvents)
+    }
+
+    private var currentTimeIndicator: some View {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        let timeString = formatter.string(from: currentTime)
+
+        return HStack(spacing: 0) {
+            Circle()
+                .fill(CyberTheme.neonMagenta)
+                .frame(width: 8, height: 8)
+                .shadow(color: CyberTheme.neonMagenta.opacity(0.8), radius: 4, x: 0, y: 0)
+
+            Rectangle()
+                .fill(CyberTheme.neonMagenta)
+                .frame(height: 2)
+                .shadow(color: CyberTheme.neonMagenta.opacity(0.6), radius: 2, x: 0, y: 0)
+        }
+        .overlay(
+            Text(timeString.uppercased())
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundColor(CyberTheme.neonMagenta)
+                .padding(.horizontal, 4)
+                .background(CyberTheme.background)
+                .offset(y: -10),
+            alignment: .leading
+        )
+        .padding(.vertical, 8)
+    }
+
+    private func eventCard(_ event: EKEvent, isPast: Bool = false) -> some View {
         let isHovered = hoveredEventId == event.eventIdentifier
         let eventColor = Color(nsColor: event.calendarColor)
+        let opacity: Double = isPast ? 0.5 : 1.0
 
         return VStack(alignment: .leading, spacing: 3) {
             Text(event.formattedStartTime.uppercased())
                 .font(.system(size: 8, weight: .bold, design: .monospaced))
-                .foregroundColor(eventColor)
+                .foregroundColor(eventColor.opacity(opacity))
 
             Text(event.title ?? "UNTITLED")
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundColor(CyberTheme.textPrimary)
+                .foregroundColor(isPast ? CyberTheme.textSecondary : CyberTheme.textPrimary)
+                .strikethrough(isPast, color: CyberTheme.textSecondary.opacity(0.5))
                 .lineLimit(2)
         }
         .padding(.horizontal, 8)
@@ -200,20 +382,20 @@ struct CalendarView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 4)
-                .fill(CyberTheme.cardBackground)
+                .fill(CyberTheme.cardBackground.opacity(isPast ? 0.5 : 1.0))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 4)
-                .stroke(isHovered ? eventColor : eventColor.opacity(0.3), lineWidth: 1)
+                .stroke(isHovered ? eventColor : eventColor.opacity(0.3 * opacity), lineWidth: 1)
         )
         .overlay(
             Rectangle()
-                .fill(eventColor)
+                .fill(eventColor.opacity(opacity))
                 .frame(width: 3)
-                .shadow(color: eventColor.opacity(0.6), radius: 3, x: 0, y: 0),
+                .shadow(color: isPast ? Color.clear : eventColor.opacity(0.6), radius: 3, x: 0, y: 0),
             alignment: .leading
         )
-        .shadow(color: isHovered ? eventColor.opacity(0.3) : Color.clear, radius: 4, x: 0, y: 0)
+        .shadow(color: isHovered && !isPast ? eventColor.opacity(0.3) : Color.clear, radius: 4, x: 0, y: 0)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 hoveredEventId = hovering ? event.eventIdentifier : nil

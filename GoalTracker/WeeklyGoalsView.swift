@@ -6,6 +6,8 @@ struct WeeklyGoalsView: View {
     @State private var editingGoal: Goal?
     @State private var editText = ""
     @State private var hoveredGoalId: UUID?
+    @State private var showAddGoal = false
+    @State private var addGoalCategory: GoalCategory = .personal
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -56,6 +58,9 @@ struct WeeklyGoalsView: View {
         }
         .background(CyberTheme.background)
         .id(dataService.refreshTrigger)
+        .sheet(isPresented: $showAddGoal) {
+            AddGoalSheet(weekStart: weekStart, initialCategory: addGoalCategory)
+        }
     }
 
     @ViewBuilder
@@ -83,21 +88,54 @@ struct WeeklyGoalsView: View {
                 Rectangle()
                     .fill(CyberTheme.gridLine)
                     .frame(height: 1)
+
+                // Add button for this category
+                Button(action: {
+                    addGoalCategory = category
+                    showAddGoal = true
+                }) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(categoryColor(category))
+                        .frame(width: 20, height: 20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(categoryColor(category).opacity(0.5), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
             }
 
             if goals.isEmpty {
-                HStack {
-                    Spacer()
-                    VStack(spacing: 6) {
-                        Image(systemName: "plus.viewfinder")
-                            .font(.system(size: 18, design: .monospaced))
-                            .foregroundColor(CyberTheme.dimGreen)
-                        Text("NO_OBJECTIVES")
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
-                            .foregroundColor(CyberTheme.textSecondary)
+                Button(action: {
+                    addGoalCategory = category
+                    showAddGoal = true
+                }) {
+                    HStack {
+                        Spacer()
+                        VStack(spacing: 6) {
+                            Image(systemName: "plus.viewfinder")
+                                .font(.system(size: 18, design: .monospaced))
+                                .foregroundColor(CyberTheme.dimGreen)
+                            Text("ADD_OBJECTIVE")
+                                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                .foregroundColor(CyberTheme.textSecondary)
+                        }
+                        .padding(.vertical, 12)
+                        Spacer()
                     }
-                    .padding(.vertical, 12)
-                    Spacer()
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering {
+                        NSCursor.pointingHand.push()
+                    } else {
+                        NSCursor.pop()
+                    }
                 }
             } else {
                 VStack(spacing: 6) {
@@ -139,6 +177,9 @@ struct WeeklyGoalsView: View {
             .buttonStyle(.plain)
             .frame(width: 28, height: 28)
             .contentShape(Rectangle())
+            .onHover { hovering in
+                if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
 
             // Goal text
             if editingGoal?.id == goal.id {
@@ -190,6 +231,9 @@ struct WeeklyGoalsView: View {
             }
             .buttonStyle(.plain)
             .help(goal.isFocusedToday ? "DEACTIVATE" : "ACTIVATE_TODAY")
+            .onHover { hovering in
+                if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
 
             // Delete button (only on hover)
             if isHovered {
@@ -205,6 +249,9 @@ struct WeeklyGoalsView: View {
                 }
                 .buttonStyle(.plain)
                 .transition(.opacity)
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
             }
         }
         .padding(.horizontal, 10)

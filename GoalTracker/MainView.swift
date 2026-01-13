@@ -85,6 +85,9 @@ struct MainView: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
 
                 VStack(spacing: 2) {
                     Text("// WEEK_OF")
@@ -106,6 +109,9 @@ struct MainView: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
 
                 if !WeekService.shared.isCurrentWeek(selectedWeekStart) {
                     Button(action: {
@@ -122,6 +128,9 @@ struct MainView: View {
                             .cornerRadius(4)
                     }
                     .buttonStyle(.plain)
+                    .onHover { hovering in
+                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    }
                 }
             }
 
@@ -148,6 +157,9 @@ struct MainView: View {
                     .shadow(color: CyberTheme.matrixGreen.opacity(0.5), radius: 8, x: 0, y: 0)
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
 
                 Button(action: { showAddEvent = true }) {
                     HStack(spacing: 6) {
@@ -167,6 +179,9 @@ struct MainView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
 
                 Button(action: { showSettings = true }) {
                     Image(systemName: "gearshape.fill")
@@ -179,6 +194,9 @@ struct MainView: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
             }
         }
         .padding(.horizontal, 24)
@@ -231,6 +249,9 @@ struct MainView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
             }
             Spacer()
         }
