@@ -2,15 +2,21 @@ import SwiftUI
 
 struct AddGoalSheet: View {
     let weekStart: Date
-    var initialCategory: GoalCategory? = nil
+    let initialCategory: GoalCategory
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var dataService = DataService.shared
 
     @State private var title = ""
-    @State private var selectedCategory: GoalCategory = .personal
+    @State private var selectedCategory: GoalCategory
     @State private var notes = ""
     @State private var showNotes = false
     @FocusState private var isTitleFocused: Bool
+
+    init(weekStart: Date, initialCategory: GoalCategory = .personal) {
+        self.weekStart = weekStart
+        self.initialCategory = initialCategory
+        self._selectedCategory = State(initialValue: initialCategory)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -188,9 +194,6 @@ struct AddGoalSheet: View {
         .frame(width: 450, height: 400)
         .background(CyberTheme.background)
         .onAppear {
-            if let category = initialCategory {
-                selectedCategory = category
-            }
             isTitleFocused = true
         }
     }
