@@ -7,6 +7,11 @@ struct GoalTrackerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     let persistenceController = PersistenceController.shared
 
+    init() {
+        // Start watching iCloud inbox for goals from iPhone
+        ICloudInboxService.shared.startWatching()
+    }
+
     var body: some Scene {
         WindowGroup {
             MainView()
@@ -22,6 +27,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Set ourselves as the notification delegate
         UNUserNotificationCenter.current().delegate = self
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // Stop watching iCloud inbox when app terminates
+        ICloudInboxService.shared.stopWatching()
     }
 
     // This method allows notifications to display even when app is in foreground
