@@ -10,6 +10,8 @@ struct AddGoalSheet: View {
     @State private var selectedCategory: GoalCategory
     @State private var notes = ""
     @State private var showNotes = false
+    @State private var showDueDate = false
+    @State private var dueDate = Date()
     @FocusState private var isTitleFocused: Bool
 
     init(weekStart: Date, initialCategory: GoalCategory = .personal) {
@@ -131,6 +133,67 @@ struct AddGoalSheet: View {
                     }
                 }
 
+                // Due Date Section (collapsible, optional)
+                VStack(alignment: .leading, spacing: 10) {
+                    Button(action: { withAnimation { showDueDate.toggle() } }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: showDueDate ? "chevron.down" : "chevron.right")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            Text("> SET_DUE_DATE (OPTIONAL)")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            if showDueDate {
+                                Circle()
+                                    .fill(CyberTheme.neonYellow)
+                                    .frame(width: 6, height: 6)
+                            }
+                        }
+                        .foregroundColor(CyberTheme.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    }
+
+                    if showDueDate {
+                        HStack(spacing: 12) {
+                            Image(systemName: "calendar.badge.clock")
+                                .font(.system(size: 14, design: .monospaced))
+                                .foregroundColor(CyberTheme.neonYellow)
+
+                            DatePicker(
+                                "",
+                                selection: $dueDate,
+                                in: Date()...,
+                                displayedComponents: .date
+                            )
+                            .datePickerStyle(.field)
+                            .labelsHidden()
+                            .font(.system(size: 12, design: .monospaced))
+
+                            Button(action: {
+                                withAnimation {
+                                    showDueDate = false
+                                }
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(CyberTheme.textSecondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Clear due date")
+                        }
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(CyberTheme.cardBackground)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(CyberTheme.neonYellow.opacity(0.3), lineWidth: 1)
+                        )
+                    }
+                }
+
                 // Week Info
                 HStack(spacing: 8) {
                     Image(systemName: "calendar")
@@ -191,7 +254,7 @@ struct AddGoalSheet: View {
                 alignment: .top
             )
         }
-        .frame(width: 450, height: 400)
+        .frame(width: 450, height: 480)
         .background(CyberTheme.background)
         .onAppear {
             isTitleFocused = true
@@ -236,7 +299,13 @@ struct AddGoalSheet: View {
 
     private func addGoal() {
         guard !title.isEmpty else { return }
-        _ = dataService.createGoal(title: title, category: selectedCategory, weekStart: weekStart, notes: notes.isEmpty ? nil : notes)
+        _ = dataService.createGoal(
+            title: title,
+            category: selectedCategory,
+            weekStart: weekStart,
+            notes: notes.isEmpty ? nil : notes,
+            dueDate: showDueDate ? dueDate : nil
+        )
         dismiss()
     }
 }

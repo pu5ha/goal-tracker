@@ -49,6 +49,7 @@ class NotificationService: ObservableObject {
         scheduleMorningBriefing()
         scheduleMiddayCheckin()
         scheduleEndOfDayReview()
+        scheduleDueDateReminders()
     }
 
     // MARK: - Morning Briefing (8 AM)
@@ -141,6 +142,69 @@ class NotificationService: ObservableObject {
         }
     }
 
+    // MARK: - Due Date Reminders
+
+    func scheduleDueDateReminders() {
+        scheduleDueTodayMorningReminder()
+        scheduleDueTodayAfternoonReminder()
+    }
+
+    private func scheduleDueTodayMorningReminder() {
+        center.removePendingNotificationRequests(withIdentifiers: ["due-today-morning"])
+
+        var dateComponents = DateComponents()
+        dateComponents.hour = 9
+        dateComponents.minute = 0
+
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+
+        let content = UNMutableNotificationContent()
+        content.title = "⏰ Goals Due Today"
+        content.body = "Tap to view goals that need attention today"
+        content.sound = .default
+        content.categoryIdentifier = "DUE_TODAY"
+
+        let request = UNNotificationRequest(
+            identifier: "due-today-morning",
+            content: content,
+            trigger: trigger
+        )
+
+        center.add(request) { error in
+            if let error = error {
+                print("Failed to schedule due today morning reminder: \(error)")
+            }
+        }
+    }
+
+    private func scheduleDueTodayAfternoonReminder() {
+        center.removePendingNotificationRequests(withIdentifiers: ["due-today-afternoon"])
+
+        var dateComponents = DateComponents()
+        dateComponents.hour = 14  // 2 PM
+        dateComponents.minute = 0
+
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+
+        let content = UNMutableNotificationContent()
+        content.title = "⏰ Due Today Check-in"
+        content.body = "Don't forget about your goals due today"
+        content.sound = .default
+        content.categoryIdentifier = "DUE_TODAY"
+
+        let request = UNNotificationRequest(
+            identifier: "due-today-afternoon",
+            content: content,
+            trigger: trigger
+        )
+
+        center.add(request) { error in
+            if let error = error {
+                print("Failed to schedule due today afternoon reminder: \(error)")
+            }
+        }
+    }
+
     // MARK: - Send Immediate Notifications with Content
 
     func sendMorningBriefingNow() {
@@ -173,6 +237,16 @@ class NotificationService: ObservableObject {
         center.add(request)
     }
 
+    func sendDueTodayReminderNow() {
+        let content = buildDueTodayContent()
+        let request = UNNotificationRequest(
+            identifier: "due-today-\(Date().timeIntervalSince1970)",
+            content: content,
+            trigger: nil
+        )
+        center.add(request)
+    }
+
     // MARK: - Build Notification Content
 
     private func buildMorningContent() -> UNMutableNotificationContent {
@@ -186,6 +260,18 @@ class NotificationService: ObservableObject {
         let weekStart = weekService.currentWeekStart
         let stats = dataService.getWeekStats(for: weekStart)
         bodyParts.append("📋 Goals: \(stats.completed)/\(stats.total) complete")
+
+        // Due today goals
+        let dueToday = dataService.getAllGoalsDueToday()
+        if !dueToday.isEmpty {
+            bodyParts.append("⏰ \(dueToday.count) goal(s) due today")
+        }
+
+        // Overdue goals
+        let overdue = dataService.getAllOverdueGoals()
+        if !overdue.isEmpty {
+            bodyParts.append("⚠️ \(overdue.count) overdue goal(s)")
+        }
 
         // Today's focus
         let focusedGoals = dataService.getTodaysFocusedGoals(for: weekStart)
@@ -226,6 +312,12 @@ class NotificationService: ObservableObject {
         let progressPercent = stats.total > 0 ? Int((Double(stats.completed) / Double(stats.total)) * 100) : 0
         bodyParts.append("📋 Progress: \(progressPercent)% (\(stats.completed)/\(stats.total))")
 
+        // Due today goals
+        let dueToday = dataService.getAllGoalsDueToday()
+        if !dueToday.isEmpty {
+            bodyParts.append("⏰ \(dueToday.count) goal(s) still due today")
+        }
+
         // Focus items status
         let focusedGoals = dataService.getTodaysFocusedGoals(for: weekStart)
         if !focusedGoals.isEmpty {
@@ -263,6 +355,19 @@ class NotificationService: ObservableObject {
         let progressPercent = stats.total > 0 ? Int((Double(stats.completed) / Double(stats.total)) * 100) : 0
         bodyParts.append("📋 Week progress: \(progressPercent)% (\(stats.completed)/\(stats.total))")
 
+        // Due today incomplete warning
+        let dueTodayIncomplete = dataService.getAllGoalsDueToday()
+        if !dueTodayIncomplete.isEmpty {
+            bodyParts.append("⚠️ \(dueTodayIncomplete.count) goal(s) still due today!")
+        }
+
+        // Due tomorrow preview
+        let weekGoals = dataService.getGoals(for: weekStart)
+        let dueTomorrow = weekGoals.filter { $0.isDueTomorrow && !$0.isCompleted }
+        if !dueTomorrow.isEmpty {
+            bodyParts.append("⏰ \(dueTomorrow.count) goal(s) due tomorrow")
+        }
+
         // Incomplete goals count
         let incompleteCount = stats.total - stats.completed
         if incompleteCount > 0 {
@@ -277,6 +382,32 @@ class NotificationService: ObservableObject {
             bodyParts.append("📅 Tomorrow: \(tomorrowEvents.count) event(s)")
         } else {
             bodyParts.append("📅 Tomorrow: No events scheduled")
+        }
+
+        content.body = bodyParts.joined(separator: "\n")
+        return content
+    }
+
+    private func buildDueTodayContent() -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.title = "⏰ Goals Due Today"
+        content.sound = .default
+
+        let dueToday = dataService.getAllGoalsDueToday()
+        let overdue = dataService.getAllOverdueGoals()
+
+        var bodyParts: [String] = []
+
+        if !overdue.isEmpty {
+            bodyParts.append("⚠️ \(overdue.count) overdue goal(s)")
+        }
+
+        if !dueToday.isEmpty {
+            let titles = dueToday.prefix(3).compactMap { $0.title }.joined(separator: ", ")
+            let suffix = dueToday.count > 3 ? " +\(dueToday.count - 3) more" : ""
+            bodyParts.append("📋 Due today: \(titles)\(suffix)")
+        } else if overdue.isEmpty {
+            bodyParts.append("✅ No goals due today")
         }
 
         content.body = bodyParts.joined(separator: "\n")

@@ -12,6 +12,8 @@ struct WeeklyGoalsView: View {
     @State private var expandedGoalIds: Set<UUID> = []
     @State private var editingNotesGoal: Goal?
     @State private var notesText = ""
+    @State private var editingDueDateGoal: Goal?
+    @State private var selectedDueDate = Date()
     @State private var draggedGoal: Goal?
     @State private var justCompletedGoalId: UUID?
     @State private var pulsingAddButton: GoalCategory?
@@ -56,6 +58,9 @@ struct WeeklyGoalsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    // Due Today Section
+                    dueTodaySection
+
                     ForEach(GoalCategory.allCases) { category in
                         categorySection(category)
                     }
@@ -242,85 +247,106 @@ struct WeeklyGoalsView: View {
                             .textFieldStyle(.plain)
                             .font(.system(size: 12, weight: .medium, design: .monospaced))
                             .foregroundColor(CyberTheme.textPrimary)
+                            .padding(8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(CyberTheme.background)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(CyberTheme.matrixGreen, lineWidth: 1)
+                            )
                             .onAppear { editText = goal.unwrappedTitle }
                     } else {
                         Text(goal.unwrappedTitle)
                             .font(.system(size: 12, weight: goal.isCompleted ? .regular : .medium, design: .monospaced))
                             .foregroundColor(goal.isCompleted ? CyberTheme.textSecondary : CyberTheme.textPrimary)
                             .strikethrough(goal.isCompleted, color: CyberTheme.textSecondary)
+                            .lineLimit(nil)
                             .onTapGesture(count: 2) { startEditing(goal) }
                     }
                 }
 
                 Spacer()
 
-                // Notes indicator/button
-                Button(action: { toggleExpanded(goal) }) {
-                    Image(systemName: goal.hasNotes ? "note.text" : "note.text.badge.plus")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundColor(goal.hasNotes ? CyberTheme.neonCyan : CyberTheme.textSecondary.opacity(0.5))
-                        .frame(width: 20, height: 20)
-                }
-                .buttonStyle(.plain)
-                .help(goal.hasNotes ? "VIEW_NOTES" : "ADD_NOTES")
-                .onHover { hovering in
-                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                }
+                // Right side badges - stacked vertically for more room
+                VStack(alignment: .trailing, spacing: 4) {
+                    // Top row: Active button + Delete
+                    HStack(spacing: 6) {
+                        // Rolled over indicator
+                        if goal.rolledOverFrom != nil {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundColor(CyberTheme.neonYellow.opacity(0.7))
+                                .help("ROLLED_OVER")
+                        }
 
-                // Rolled over indicator
-                if goal.rolledOverFrom != nil {
-                    Image(systemName: "arrow.counterclockwise")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundColor(CyberTheme.neonYellow.opacity(0.7))
-                        .help("ROLLED_OVER")
-                }
+                        // Notes indicator/button
+                        Button(action: { toggleExpanded(goal) }) {
+                            Image(systemName: goal.hasNotes ? "note.text" : "note.text.badge.plus")
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundColor(goal.hasNotes ? CyberTheme.neonCyan : CyberTheme.textSecondary.opacity(0.5))
+                                .frame(width: 20, height: 20)
+                        }
+                        .buttonStyle(.plain)
+                        .help(goal.hasNotes ? "VIEW_NOTES" : "ADD_NOTES")
+                        .onHover { hovering in
+                            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
 
-                // Today focus button
-                Button(action: { toggleFocusToday(goal) }) {
-                    HStack(spacing: 3) {
-                        Image(systemName: goal.isFocusedToday ? "bolt.fill" : "bolt")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        if goal.isFocusedToday {
-                            Text("ACTIVE")
-                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        // Today focus button with ACTIVE label
+                        Button(action: { toggleFocusToday(goal) }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: goal.isFocusedToday ? "bolt.fill" : "bolt")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                if goal.isFocusedToday {
+                                    Text("ACTIVE")
+                                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                }
+                            }
+                            .padding(.horizontal, goal.isFocusedToday ? 6 : 4)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(goal.isFocusedToday ? CyberTheme.neonYellow : Color.clear)
+                            )
+                            .foregroundColor(goal.isFocusedToday ? CyberTheme.background : CyberTheme.textSecondary)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 3)
+                                    .stroke(goal.isFocusedToday ? Color.clear : CyberTheme.gridLine, lineWidth: 1)
+                            )
+                            .shadow(color: goal.isFocusedToday ? CyberTheme.neonYellow.opacity(0.5) : Color.clear, radius: 4, x: 0, y: 0)
+                        }
+                        .buttonStyle(.plain)
+                        .help(goal.isFocusedToday ? "DEACTIVATE" : "ACTIVATE_TODAY")
+                        .onHover { hovering in
+                            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
+
+                        // Delete button (only on hover)
+                        Button(action: { deleteGoal(goal) }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundColor(CyberTheme.neonMagenta.opacity(0.7))
+                                .frame(width: 20, height: 20)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .stroke(CyberTheme.neonMagenta.opacity(0.3), lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .opacity(isHovered ? 1 : 0)
+                        .scaleEffect(isHovered ? 1 : 0.8)
+                        .animation(.easeOut(duration: 0.15), value: isHovered)
+                        .onHover { hovering in
+                            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                         }
                     }
-                    .padding(.horizontal, goal.isFocusedToday ? 8 : 6)
-                    .padding(.vertical, 4)
-                    .background(
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(goal.isFocusedToday ? CyberTheme.neonYellow : Color.clear)
-                    )
-                    .foregroundColor(goal.isFocusedToday ? CyberTheme.background : CyberTheme.textSecondary)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 3)
-                            .stroke(goal.isFocusedToday ? Color.clear : CyberTheme.gridLine, lineWidth: 1)
-                    )
-                    .shadow(color: goal.isFocusedToday ? CyberTheme.neonYellow.opacity(0.5) : Color.clear, radius: 4, x: 0, y: 0)
-                }
-                .buttonStyle(.plain)
-                .help(goal.isFocusedToday ? "DEACTIVATE" : "ACTIVATE_TODAY")
-                .onHover { hovering in
-                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                }
 
-                // Delete button (only on hover) with smooth transition
-                Button(action: { deleteGoal(goal) }) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundColor(CyberTheme.neonMagenta.opacity(0.7))
-                        .frame(width: 20, height: 20)
-                        .background(
-                            RoundedRectangle(cornerRadius: 3)
-                                .stroke(CyberTheme.neonMagenta.opacity(0.3), lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
-                .opacity(isHovered ? 1 : 0)
-                .scaleEffect(isHovered ? 1 : 0.8)
-                .animation(.easeOut(duration: 0.15), value: isHovered)
-                .onHover { hovering in
-                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    // Bottom row: Due date badge (only for future due dates - today/overdue already shown in DUE_TODAY section and highlighted)
+                    if goal.hasDueDate && !goal.isDueToday && !goal.isOverdue {
+                        DueDateBadge(goal: goal)
+                    }
                 }
             }
             .padding(.horizontal, 10)
@@ -422,20 +448,37 @@ struct WeeklyGoalsView: View {
                             if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                         }
                     }
+
+                    // Due Date Section
+                    Rectangle()
+                        .fill(CyberTheme.gridLine)
+                        .frame(height: 1)
+                        .padding(.horizontal, 10)
+
+                    dueDateEditSection(goal)
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 10)
                 }
             }
         }
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(goal.isCompleted ? categoryColor(category).opacity(0.1) : (isHovered || isExpanded ? CyberTheme.cardBackground : Color.clear))
+                .fill(
+                    goal.isCompleted ? categoryColor(category).opacity(0.1) :
+                    (goal.isOverdue ? CyberTheme.neonMagenta.opacity(0.08) :
+                    (goal.isDueToday ? CyberTheme.neonYellow.opacity(0.1) :
+                    (isHovered || isExpanded ? CyberTheme.cardBackground : Color.clear)))
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6)
                 .stroke(
                     goal.isCompleted ? categoryColor(category).opacity(0.2) :
+                    (goal.isOverdue ? CyberTheme.neonMagenta.opacity(0.5) :
+                    (goal.isDueToday ? CyberTheme.neonYellow.opacity(0.5) :
                     (goal.isFocusedToday ? CyberTheme.neonYellow.opacity(0.3) :
-                    (isHovered || isExpanded ? CyberTheme.gridLine : Color.clear)),
-                    lineWidth: 1
+                    (isHovered || isExpanded ? CyberTheme.gridLine : Color.clear)))),
+                    lineWidth: (goal.isDueToday || goal.isOverdue) ? 1.5 : 1
                 )
         )
         // Drag state visual feedback
@@ -528,12 +571,265 @@ struct WeeklyGoalsView: View {
         notesText = ""
     }
 
+    // MARK: - Due Date Editing
+
+    @ViewBuilder
+    private func dueDateEditSection(_ goal: Goal) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("> DUE_DATE:")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(CyberTheme.textSecondary)
+
+            if editingDueDateGoal?.id == goal.id {
+                // Editing mode
+                HStack(spacing: 12) {
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.system(size: 14, design: .monospaced))
+                        .foregroundColor(CyberTheme.neonYellow)
+
+                    DatePicker(
+                        "",
+                        selection: $selectedDueDate,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.field)
+                    .labelsHidden()
+                    .font(.system(size: 12, design: .monospaced))
+
+                    Spacer()
+
+                    Button(action: { cancelDueDateEdit() }) {
+                        Text("[CANCEL]")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundColor(CyberTheme.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    }
+
+                    Button(action: { saveDueDate(goal) }) {
+                        Text("[SAVE]")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(CyberTheme.neonYellow)
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    }
+                }
+                .padding(10)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(CyberTheme.background)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(CyberTheme.neonYellow.opacity(0.5), lineWidth: 1)
+                )
+            } else if let dueDate = goal.dueDate {
+                // Has due date - show it with edit/clear options
+                HStack(spacing: 10) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(CyberTheme.neonYellow)
+
+                    Text(formatDueDate(dueDate))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(CyberTheme.textPrimary)
+
+                    DueDateBadge(goal: goal)
+
+                    Spacer()
+
+                    Button(action: { startEditingDueDate(goal) }) {
+                        Text("[EDIT]")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundColor(CyberTheme.neonYellow.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    }
+
+                    Button(action: { clearDueDate(goal) }) {
+                        Text("[CLEAR]")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundColor(CyberTheme.neonMagenta.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    }
+                }
+            } else {
+                // No due date - show add button
+                Button(action: { startEditingDueDate(goal) }) {
+                    HStack {
+                        Image(systemName: "plus")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        Text("SET_DUE_DATE")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    }
+                    .foregroundColor(CyberTheme.textSecondary.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
+            }
+        }
+    }
+
+    private func startEditingDueDate(_ goal: Goal) {
+        editingDueDateGoal = goal
+        selectedDueDate = goal.dueDate ?? Date()
+    }
+
+    private func cancelDueDateEdit() {
+        editingDueDateGoal = nil
+    }
+
+    private func saveDueDate(_ goal: Goal) {
+        dataService.updateDueDate(goal, dueDate: selectedDueDate)
+        editingDueDateGoal = nil
+    }
+
+    private func clearDueDate(_ goal: Goal) {
+        dataService.clearDueDate(goal)
+    }
+
+    private func formatDueDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMM d"
+        return formatter.string(from: date)
+    }
+
     private func categoryColor(_ category: GoalCategory) -> Color {
         switch category {
         case .work: return CyberTheme.neonCyan
         case .health: return CyberTheme.matrixGreen
         case .personal: return CyberTheme.neonMagenta
         }
+    }
+
+    // MARK: - Due Today Section
+    @ViewBuilder
+    private var dueTodaySection: some View {
+        let dueToday = dataService.getGoalsDueToday(for: weekStart)
+        let overdue = dataService.getOverdueGoals(for: weekStart)
+        let allUrgent = overdue + dueToday
+
+        if !allUrgent.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                // Section Header
+                HStack(spacing: 8) {
+                    Rectangle()
+                        .fill(CyberTheme.neonYellow)
+                        .frame(width: 3, height: 12)
+                        .shadow(color: CyberTheme.neonYellow.opacity(0.8), radius: 4)
+
+                    Image(systemName: "clock.badge.exclamationmark.fill")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundColor(CyberTheme.neonYellow)
+
+                    Text("// DUE_TODAY")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(CyberTheme.textSecondary)
+
+                    if !overdue.isEmpty {
+                        Text("[\(overdue.count) OVERDUE]")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(CyberTheme.neonMagenta)
+                    }
+
+                    Text("[\(allUrgent.count)]")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundColor(CyberTheme.neonYellow.opacity(0.7))
+
+                    Rectangle()
+                        .fill(CyberTheme.gridLine)
+                        .frame(height: 1)
+                }
+
+                // Urgent goals list
+                VStack(spacing: 6) {
+                    ForEach(allUrgent, id: \.id) { goal in
+                        urgentGoalRow(goal)
+                    }
+                }
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(CyberTheme.neonYellow.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(CyberTheme.neonYellow.opacity(0.3), lineWidth: 1)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func urgentGoalRow(_ goal: Goal) -> some View {
+        let isOverdue = goal.isOverdue
+        let accentColor = isOverdue ? CyberTheme.neonMagenta : CyberTheme.neonYellow
+
+        HStack(spacing: 10) {
+            // Checkbox
+            Button {
+                toggleGoal(goal)
+            } label: {
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(accentColor.opacity(0.5), lineWidth: 1.5)
+                    .frame(width: 18, height: 18)
+                    .overlay(
+                        goal.isCompleted ?
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(accentColor) : nil
+                    )
+            }
+            .buttonStyle(.plain)
+
+            // Status icon
+            Image(systemName: isOverdue ? "exclamationmark.triangle.fill" : "clock.fill")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(accentColor)
+
+            // Goal title
+            Text(goal.unwrappedTitle)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundColor(CyberTheme.textPrimary)
+                .lineLimit(nil)
+
+            Spacer()
+
+            // Category indicator
+            Text(goal.unwrappedCategory.uppercased())
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundColor(categoryColor(goal.goalCategory).opacity(0.7))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 3)
+                        .stroke(categoryColor(goal.goalCategory).opacity(0.3), lineWidth: 1)
+                )
+
+            // Due date badge
+            DueDateBadge(goal: goal)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(accentColor.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(accentColor.opacity(0.2), lineWidth: 1)
+        )
     }
 }
 
@@ -598,5 +894,80 @@ struct AddCategoryButton: View {
             isHovered = hovering
             if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
+    }
+}
+
+// MARK: - Due Date Badge
+struct DueDateBadge: View {
+    let goal: Goal
+    @State private var isHovered = false
+
+    private var displayText: String {
+        switch goal.dueDateStatus {
+        case .overdue:
+            if let days = goal.daysUntilDue {
+                return abs(days) == 1 ? "1D LATE" : "\(abs(days))D LATE"
+            }
+            return "OVERDUE"
+        case .dueToday:
+            return "TODAY"
+        case .dueTomorrow:
+            return "TOMORROW"
+        case .dueSoon:
+            if let days = goal.daysUntilDue {
+                return "\(days)D"
+            }
+            return "SOON"
+        case .upcoming:
+            if let date = goal.dueDate {
+                let formatter = DateFormatter()
+                formatter.dateFormat = "M/d"
+                return formatter.string(from: date)
+            }
+            return ""
+        default:
+            return ""
+        }
+    }
+
+    private var badgeColor: Color {
+        goal.dueDateStatus.badgeColor
+    }
+
+    var body: some View {
+        if goal.dueDateStatus != .noDueDate && goal.dueDateStatus != .completed {
+            HStack(spacing: 3) {
+                if let icon = goal.dueDateStatus.icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                }
+                Text(displayText)
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(badgeColor.opacity(isHovered ? 0.3 : 0.2))
+            )
+            .foregroundColor(badgeColor)
+            .overlay(
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(badgeColor.opacity(0.5), lineWidth: 1)
+            )
+            .shadow(color: badgeColor.opacity(isHovered ? 0.5 : 0), radius: 4)
+            .scaleEffect(isHovered ? 1.05 : 1.0)
+            .animation(.easeOut(duration: 0.15), value: isHovered)
+            .onHover { hovering in
+                isHovered = hovering
+            }
+            .help(goal.dueDate.map { "Due: \(formatDate($0))" } ?? "")
+        }
+    }
+
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
     }
 }

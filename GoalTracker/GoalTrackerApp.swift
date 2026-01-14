@@ -10,6 +10,9 @@ struct GoalTrackerApp: App {
     init() {
         // Start watching iCloud inbox for goals from iPhone
         ICloudInboxService.shared.startWatching()
+
+        // Archive completed goals from previous days
+        DataService.shared.archiveGoalsCompletedBeforeToday()
     }
 
     var body: some Scene {

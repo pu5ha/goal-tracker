@@ -8,6 +8,7 @@ struct MainView: View {
     @State private var showAddGoal = false
     @State private var showAddEvent = false
     @State private var showSettings = false
+    @State private var showArchive = false
     @State private var selectedTab: MainTab = .calendar
     @State private var hoveredButton: String?
 
@@ -38,7 +39,7 @@ struct MainView: View {
 
                 HSplitView {
                     WeeklyGoalsView(weekStart: selectedWeekStart)
-                        .frame(minWidth: 280, idealWidth: 300, maxWidth: 340)
+                        .frame(minWidth: 320, idealWidth: 380, maxWidth: 420)
 
                     VStack(spacing: 0) {
                         tabSelector
@@ -53,7 +54,7 @@ struct MainView: View {
                 }
             }
         }
-        .frame(minWidth: 1000, minHeight: 750)
+        .frame(minWidth: 1050, minHeight: 750)
         .onAppear {
             checkRollover()
             requestCalendarAccess()
@@ -67,6 +68,9 @@ struct MainView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsSheet()
+        }
+        .sheet(isPresented: $showArchive) {
+            ArchiveView()
         }
         .id(dataService.refreshTrigger)
     }
@@ -204,6 +208,28 @@ struct MainView: View {
                 .animation(.easeOut(duration: 0.15), value: hoveredButton)
                 .onHover { hovering in
                     hoveredButton = hovering ? "event" : nil
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
+
+                Button(action: { showArchive = true }) {
+                    Image(systemName: "archivebox.fill")
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundColor(hoveredButton == "archive" ? CyberTheme.textPrimary : CyberTheme.textSecondary)
+                        .frame(width: 32, height: 32)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(hoveredButton == "archive" ? CyberTheme.cardBackground : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(hoveredButton == "archive" ? CyberTheme.matrixGreen.opacity(0.5) : CyberTheme.gridLine, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("VIEW_ARCHIVE")
+                .animation(.easeOut(duration: 0.15), value: hoveredButton)
+                .onHover { hovering in
+                    hoveredButton = hovering ? "archive" : nil
                     if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                 }
 

@@ -16,7 +16,7 @@ class DataService: ObservableObject {
 
     // MARK: - Goal Operations
 
-    func createGoal(title: String, category: GoalCategory, weekStart: Date? = nil, notes: String? = nil) -> Goal {
+    func createGoal(title: String, category: GoalCategory, weekStart: Date? = nil, notes: String? = nil, dueDate: Date? = nil) -> Goal {
         let targetWeekStart = weekStart ?? weekService.currentWeekStart
 
         // Get the next sort order for this category
@@ -32,6 +32,7 @@ class DataService: ObservableObject {
         goal.createdAt = Date()
         goal.notes = notes
         goal.sortOrder = maxSortOrder + 1
+        goal.dueDate = dueDate
         save()
         return goal
     }
@@ -121,6 +122,72 @@ class DataService: ObservableObject {
         return goals.filter { $0.isFocusedToday && !$0.isCompleted }
     }
 
+    // MARK: - Due Date Operations
+
+    func updateDueDate(_ goal: Goal, dueDate: Date?) {
+        goal.dueDate = dueDate
+        save()
+    }
+
+    func clearDueDate(_ goal: Goal) {
+        goal.dueDate = nil
+        save()
+    }
+
+    func getGoalsDueToday(for weekStart: Date) -> [Goal] {
+        let goals = getGoals(for: weekStart)
+        return goals.filter { $0.isDueToday && !$0.isCompleted }
+    }
+
+    func getGoalsDueTomorrow(for weekStart: Date) -> [Goal] {
+        let goals = getGoals(for: weekStart)
+        return goals.filter { $0.isDueTomorrow && !$0.isCompleted }
+    }
+
+    func getOverdueGoals(for weekStart: Date) -> [Goal] {
+        let goals = getGoals(for: weekStart)
+        return goals.filter { $0.isOverdue }
+    }
+
+    func getAllGoalsDueToday() -> [Goal] {
+        let request: NSFetchRequest<Goal> = Goal.fetchRequest()
+        let calendar = Calendar.current
+        let startOfToday = calendar.startOfDay(for: Date())
+        guard let endOfToday = calendar.date(byAdding: .day, value: 1, to: startOfToday) else {
+            return []
+        }
+
+        request.predicate = NSPredicate(
+            format: "dueDate >= %@ AND dueDate < %@ AND isCompleted == NO",
+            startOfToday as NSDate,
+            endOfToday as NSDate
+        )
+
+        do {
+            return try context.fetch(request)
+        } catch {
+            print("Failed to fetch due today goals: \(error)")
+            return []
+        }
+    }
+
+    func getAllOverdueGoals() -> [Goal] {
+        let request: NSFetchRequest<Goal> = Goal.fetchRequest()
+        let startOfToday = Calendar.current.startOfDay(for: Date())
+
+        request.predicate = NSPredicate(
+            format: "dueDate < %@ AND isCompleted == NO",
+            startOfToday as NSDate
+        )
+
+        do {
+            return try context.fetch(request)
+        } catch {
+            print("Failed to fetch overdue goals: \(error)")
+            return []
+        }
+    }
+
     // MARK: - Weekly Recap Operations
 
     func getOrCreateRecap(for weekStart: Date) -> WeeklyRecap {
@@ -180,6 +247,7 @@ class DataService: ObservableObject {
                 newGoal.rolledOverFrom = goal.id
                 newGoal.notes = goal.notes
                 newGoal.sortOrder = goal.sortOrder
+                newGoal.dueDate = goal.dueDate  // Preserve due date on rollover
             }
 
             save()
@@ -202,6 +270,98 @@ class DataService: ObservableObject {
         }
 
         return (total, completed, byCategory)
+    }
+
+    // MARK: - Archive Operations
+
+    func archiveCompletedGoals(completedBefore date: Date) {
+        let request: NSFetchRequest<Goal> = Goal.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "isCompleted == YES AND completedAt < %@",
+            date as NSDate
+        )
+
+        do {
+            let completedGoals = try context.fetch(request)
+
+            for goal in completedGoals {
+                // Create archived copy
+                let archived = ArchivedGoal(context: context)
+                archived.id = UUID()
+                archived.originalGoalId = goal.id
+                archived.title = goal.title
+                archived.category = goal.category
+                archived.notes = goal.notes
+                archived.weekStart = goal.weekStart
+                archived.createdAt = goal.createdAt
+                archived.completedAt = goal.completedAt
+                archived.dueDate = goal.dueDate
+                archived.archivedAt = Date()
+
+                // Delete original goal
+                context.delete(goal)
+            }
+
+            if !completedGoals.isEmpty {
+                save()
+                print("Archived \(completedGoals.count) completed goal(s)")
+            }
+        } catch {
+            print("Failed to archive completed goals: \(error)")
+        }
+    }
+
+    func archiveGoalsCompletedBeforeToday() {
+        let startOfToday = Calendar.current.startOfDay(for: Date())
+        archiveCompletedGoals(completedBefore: startOfToday)
+    }
+
+    func getArchivedGoals() -> [ArchivedGoal] {
+        let request: NSFetchRequest<ArchivedGoal> = ArchivedGoal.fetchRequest()
+        request.sortDescriptors = [
+            NSSortDescriptor(keyPath: \ArchivedGoal.completedAt, ascending: false)
+        ]
+
+        do {
+            return try context.fetch(request)
+        } catch {
+            print("Failed to fetch archived goals: \(error)")
+            return []
+        }
+    }
+
+    func getArchivedGoalsByWeek() -> [Date: [ArchivedGoal]] {
+        let archived = getArchivedGoals()
+        var grouped: [Date: [ArchivedGoal]] = [:]
+
+        for goal in archived {
+            let weekStart = goal.weekStart ?? Date.distantPast
+            if grouped[weekStart] == nil {
+                grouped[weekStart] = []
+            }
+            grouped[weekStart]?.append(goal)
+        }
+
+        return grouped
+    }
+
+    func deleteArchivedGoal(_ goal: ArchivedGoal) {
+        context.delete(goal)
+        save()
+    }
+
+    func clearAllArchivedGoals() {
+        let request: NSFetchRequest<ArchivedGoal> = ArchivedGoal.fetchRequest()
+
+        do {
+            let archived = try context.fetch(request)
+            for goal in archived {
+                context.delete(goal)
+            }
+            save()
+        } catch {
+            print("Failed to clear archived goals: \(error)")
+        }
     }
 
     // MARK: - Core Data
