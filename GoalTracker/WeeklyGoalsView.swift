@@ -15,6 +15,7 @@ struct WeeklyGoalsView: View {
     @State private var draggedGoal: Goal?
     @State private var justCompletedGoalId: UUID?
     @State private var pulsingAddButton: GoalCategory?
+    private let celebrationService = CelebrationService.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -458,6 +459,7 @@ struct WeeklyGoalsView: View {
             // Trigger completion celebration if completing (not uncompleting)
             if !wasCompleted {
                 justCompletedGoalId = goal.id
+                celebrationService.playCelebrationSound()
             }
         }
 

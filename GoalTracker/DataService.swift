@@ -67,6 +67,10 @@ class DataService: ObservableObject {
     func toggleGoalCompletion(_ goal: Goal) {
         goal.isCompleted.toggle()
         goal.completedAt = goal.isCompleted ? Date() : nil
+        // Clear focus/active status when completing a goal
+        if goal.isCompleted {
+            goal.focusDate = nil
+        }
         save()
     }
 
