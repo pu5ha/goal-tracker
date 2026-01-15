@@ -22,24 +22,25 @@ struct CalendarView: View {
     @State private var showAddEvent = false
     @State private var addEventDate: Date = Date()
     @State private var currentTime = Date()
+    @State private var isRefreshing = false
 
     private let weekService = WeekService.shared
     private let timeUpdateTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
-    // Only show today and future days for current/future weeks
-    // For past weeks, show all days
+    // Always show 7 days - starting from today for current week, or from weekStart for other weeks
     private var visibleDays: [Date] {
-        let allDays = weekService.daysOfWeek(for: weekStart)
+        let calendar = Calendar.current
 
-        // If viewing a past week, show all days
-        if weekService.isPastWeek(weekStart) {
-            return allDays
+        // For current week, show 7 days starting from today
+        if weekService.isCurrentWeek(weekStart) {
+            let today = calendar.startOfDay(for: Date())
+            return (0..<7).compactMap { dayOffset in
+                calendar.date(byAdding: .day, value: dayOffset, to: today)
+            }
         }
 
-        // For current week, filter to today and future only
-        return allDays.filter { day in
-            weekService.isToday(day) || day > Date()
-        }
+        // For past/future weeks, show 7 days from weekStart
+        return weekService.daysOfWeek(for: weekStart)
     }
 
     // Next upcoming event
@@ -54,6 +55,40 @@ struct CalendarView: View {
     var body: some View {
         VStack(spacing: 0) {
             if calendarService.hasAccess {
+                // Refresh button bar
+                HStack {
+                    Spacer()
+                    Button(action: { refreshEvents() }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .rotationEffect(.degrees(isRefreshing ? 360 : 0))
+                                .animation(isRefreshing ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default, value: isRefreshing)
+                            Text(isRefreshing ? "LOADING..." : "REFRESH")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        }
+                        .foregroundColor(CyberTheme.matrixGreen)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(isRefreshing ? CyberTheme.matrixGreen.opacity(0.1) : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(CyberTheme.matrixGreen.opacity(0.5), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isRefreshing)
+                    .onHover { hovering in
+                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(CyberTheme.cardBackground)
+
                 // Next meeting banner
                 if let next = nextEvent {
                     nextMeetingBanner(next)
@@ -235,20 +270,20 @@ struct CalendarView: View {
                         let (pastEvents, futureEvents) = splitEventsByCurrentTime(dayEvents)
 
                         ForEach(pastEvents, id: \.eventIdentifier) { event in
-                            eventCard(event, isPast: true)
-                                .onTapGesture {
-                                    eventToEdit = IdentifiableEvent(event)
-                                }
+                            Button(action: { eventToEdit = IdentifiableEvent(event) }) {
+                                eventCard(event, isPast: true)
+                            }
+                            .buttonStyle(.plain)
                         }
 
                         // Current time indicator in the middle
                         currentTimeIndicator
 
                         ForEach(futureEvents, id: \.eventIdentifier) { event in
-                            eventCard(event, isPast: false)
-                                .onTapGesture {
-                                    eventToEdit = IdentifiableEvent(event)
-                                }
+                            Button(action: { eventToEdit = IdentifiableEvent(event) }) {
+                                eventCard(event, isPast: false)
+                            }
+                            .buttonStyle(.plain)
                         }
 
                         if dayEvents.isEmpty {
@@ -257,10 +292,10 @@ struct CalendarView: View {
                         }
                     } else {
                         ForEach(dayEvents, id: \.eventIdentifier) { event in
-                            eventCard(event, isPast: false)
-                                .onTapGesture {
-                                    eventToEdit = IdentifiableEvent(event)
-                                }
+                            Button(action: { eventToEdit = IdentifiableEvent(event) }) {
+                                eventCard(event, isPast: false)
+                            }
+                            .buttonStyle(.plain)
                         }
 
                         if dayEvents.isEmpty {
@@ -404,6 +439,7 @@ struct CalendarView: View {
             withAnimation(.easeInOut(duration: 0.15)) {
                 hoveredEventId = hovering ? event.eventIdentifier : nil
             }
+            // Set cursor to pointing hand on hover
             if hovering {
                 NSCursor.pointingHand.push()
             } else {
@@ -479,7 +515,42 @@ struct CalendarView: View {
     }
 
     private func loadEvents() {
-        events = calendarService.fetchEventsForWeek(weekStart: weekStart)
+        let calendar = Calendar.current
+        var fetchedEvents: [EKEvent]
+
+        // For current week, fetch 7 days starting from today
+        if weekService.isCurrentWeek(weekStart) {
+            let today = calendar.startOfDay(for: Date())
+            let endDate = calendar.date(byAdding: .day, value: 7, to: today) ?? today
+            fetchedEvents = calendarService.fetchEvents(from: today, to: endDate)
+        } else {
+            // For past/future weeks, fetch the standard week
+            fetchedEvents = calendarService.fetchEventsForWeek(weekStart: weekStart)
+        }
+
+        // Deduplicate events with same title and start time (e.g., holidays on multiple calendars)
+        var seen = Set<String>()
+        events = fetchedEvents.filter { event in
+            let key = "\(event.title ?? "")_\(event.startDate.timeIntervalSince1970)"
+            if seen.contains(key) {
+                return false
+            }
+            seen.insert(key)
+            return true
+        }
+    }
+
+    private func refreshEvents() {
+        isRefreshing = true
+        let oldCount = events.count
+        NSLog("🔄 Refresh started - current events count: %d", oldCount)
+
+        // Trigger refresh from external sources, then reload events
+        calendarService.refreshFromExternalSources { [self] in
+            loadEvents()
+            NSLog("🔄 Refresh complete - old count: %d, new count: %d", oldCount, events.count)
+            isRefreshing = false
+        }
     }
 
     private func eventsForDay(_ date: Date) -> [EKEvent] {

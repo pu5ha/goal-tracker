@@ -7,6 +7,7 @@ class CalendarService: ObservableObject {
     static let shared = CalendarService()
 
     private let eventStore = EKEventStore()
+    private var notificationObserver: NSObjectProtocol?
 
     @Published var authorizationStatus: EKAuthorizationStatus = .notDetermined
     @Published var calendars: [EKCalendar] = []
@@ -14,6 +15,25 @@ class CalendarService: ObservableObject {
 
     init() {
         checkAuthorizationStatus()
+        setupNotificationObserver()
+    }
+
+    deinit {
+        if let observer = notificationObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    private func setupNotificationObserver() {
+        // Listen for calendar database changes (including from external syncs)
+        notificationObserver = NotificationCenter.default.addObserver(
+            forName: .EKEventStoreChanged,
+            object: eventStore,
+            queue: .main
+        ) { [weak self] _ in
+            NSLog("📅 Calendar store changed notification received")
+            self?.loadCalendars()
+        }
     }
 
     func checkAuthorizationStatus() {
@@ -52,10 +72,18 @@ class CalendarService: ObservableObject {
     }
 
     func fetchEvents(from startDate: Date, to endDate: Date) -> [EKEvent] {
-        guard hasAccess else { return [] }
+        guard hasAccess else {
+            NSLog("⚠️ No calendar access")
+            return []
+        }
 
         let predicate = eventStore.predicateForEvents(withStart: startDate, end: endDate, calendars: nil)
         let fetchedEvents = eventStore.events(matching: predicate)
+
+        NSLog("📅 Fetched %d events from %@ to %@", fetchedEvents.count, startDate as NSDate, endDate as NSDate)
+        for event in fetchedEvents {
+            NSLog("   - %@ at %@", event.title ?? "No title", (event.startDate ?? Date()) as NSDate)
+        }
 
         DispatchQueue.main.async {
             self.events = fetchedEvents
@@ -68,6 +96,22 @@ class CalendarService: ObservableObject {
         let weekEnd = WeekService.shared.weekEnd(for: weekStart)
         let adjustedEnd = Calendar.current.date(byAdding: .second, value: 1, to: weekEnd) ?? weekEnd
         return fetchEvents(from: weekStart, to: adjustedEnd)
+    }
+
+    func refreshFromExternalSources(completion: @escaping () -> Void) {
+        NSLog("📅 Triggering refresh from external sources...")
+
+        // Request EventKit to refresh its sources from external calendars
+        eventStore.refreshSourcesIfNecessary()
+
+        // Reload calendars list
+        loadCalendars()
+
+        // Small delay then complete - the actual sync from Google happens at OS level
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            NSLog("📅 Refresh complete")
+            completion()
+        }
     }
 
     func createEvent(
