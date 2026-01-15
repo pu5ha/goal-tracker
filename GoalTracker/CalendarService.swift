@@ -75,6 +75,7 @@ class CalendarService: ObservableObject {
         startDate: Date,
         endDate: Date,
         calendar: EKCalendar? = nil,
+        location: String? = nil,
         notes: String? = nil,
         isAllDay: Bool = false
     ) throws -> EKEvent {
@@ -87,6 +88,7 @@ class CalendarService: ObservableObject {
         event.startDate = startDate
         event.endDate = endDate
         event.isAllDay = isAllDay
+        event.location = location
         event.notes = notes
         event.calendar = calendar ?? eventStore.defaultCalendarForNewEvents
 

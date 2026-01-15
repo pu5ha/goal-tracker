@@ -11,6 +11,7 @@ struct AddEventSheet: View {
     @State private var endDate: Date
     @State private var isAllDay = false
     @State private var selectedCalendar: EKCalendar?
+    @State private var location = ""
     @State private var notes = ""
     @State private var showError = false
     @State private var errorMessage = ""
@@ -165,6 +166,15 @@ struct AddEventSheet: View {
                         }
                     }
 
+                    // Location
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("> LOCATION (OPTIONAL):")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(CyberTheme.textSecondary)
+
+                        LocationSearchField(location: $location)
+                    }
+
                     // Notes
                     VStack(alignment: .leading, spacing: 8) {
                         Text("> NOTES (OPTIONAL):")
@@ -248,7 +258,7 @@ struct AddEventSheet: View {
                 alignment: .top
             )
         }
-        .frame(width: 450, height: 540)
+        .frame(width: 450, height: 600)
         .background(CyberTheme.background)
         .onAppear {
             selectedCalendar = calendarService.getDefaultCalendar()
@@ -270,6 +280,7 @@ struct AddEventSheet: View {
                 startDate: startDate,
                 endDate: eventEnd,
                 calendar: selectedCalendar,
+                location: location.isEmpty ? nil : location,
                 notes: notes.isEmpty ? nil : notes,
                 isAllDay: isAllDay
             )

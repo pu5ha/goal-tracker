@@ -239,9 +239,6 @@ struct CalendarView: View {
                                 .onTapGesture {
                                     eventToEdit = IdentifiableEvent(event)
                                 }
-                                .onHover { hovering in
-                                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                                }
                         }
 
                         // Current time indicator in the middle
@@ -251,9 +248,6 @@ struct CalendarView: View {
                             eventCard(event, isPast: false)
                                 .onTapGesture {
                                     eventToEdit = IdentifiableEvent(event)
-                                }
-                                .onHover { hovering in
-                                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                 }
                         }
 
@@ -266,9 +260,6 @@ struct CalendarView: View {
                             eventCard(event, isPast: false)
                                 .onTapGesture {
                                     eventToEdit = IdentifiableEvent(event)
-                                }
-                                .onHover { hovering in
-                                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                 }
                         }
 
@@ -376,6 +367,18 @@ struct CalendarView: View {
                 .foregroundColor(isPast ? CyberTheme.textSecondary : CyberTheme.textPrimary)
                 .strikethrough(isPast, color: CyberTheme.textSecondary.opacity(0.5))
                 .lineLimit(2)
+
+            // Show location if available
+            if let location = event.location, !location.isEmpty {
+                HStack(spacing: 3) {
+                    Image(systemName: "mappin")
+                        .font(.system(size: 7, weight: .medium, design: .monospaced))
+                    Text(location)
+                        .font(.system(size: 8, design: .monospaced))
+                        .lineLimit(1)
+                }
+                .foregroundColor(CyberTheme.textSecondary.opacity(opacity * 0.8))
+            }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -396,12 +399,17 @@ struct CalendarView: View {
             alignment: .leading
         )
         .shadow(color: isHovered && !isPast ? eventColor.opacity(0.3) : Color.clear, radius: 4, x: 0, y: 0)
+        .contentShape(Rectangle())
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 hoveredEventId = hovering ? event.eventIdentifier : nil
             }
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
         }
-        .contentShape(Rectangle())
     }
 
     private var noAccessView: some View {
@@ -496,6 +504,7 @@ struct EditEventSheet: View {
     @State private var startDate: Date = Date()
     @State private var endDate: Date = Date()
     @State private var isAllDay: Bool = false
+    @State private var location: String = ""
     @State private var notes: String = ""
     @State private var showDeleteConfirm = false
 
@@ -525,6 +534,9 @@ struct EditEventSheet: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
             }
             .padding(20)
             .background(CyberTheme.cardBackground)
@@ -609,6 +621,15 @@ struct EditEventSheet: View {
                         }
                     }
 
+                    // Location
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("> LOCATION:")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(CyberTheme.textSecondary)
+
+                        LocationSearchField(location: $location)
+                    }
+
                     // Notes
                     VStack(alignment: .leading, spacing: 8) {
                         Text("> NOTES:")
@@ -648,6 +669,9 @@ struct EditEventSheet: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
 
                 Spacer()
 
@@ -663,6 +687,9 @@ struct EditEventSheet: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
 
                 Button(action: saveEvent) {
                     Text("[SAVE]")
@@ -675,6 +702,9 @@ struct EditEventSheet: View {
                         .shadow(color: CyberTheme.neonCyan.opacity(0.5), radius: 6, x: 0, y: 0)
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
             }
             .padding(20)
             .background(CyberTheme.cardBackground)
@@ -685,13 +715,14 @@ struct EditEventSheet: View {
                 alignment: .top
             )
         }
-        .frame(width: 450, height: 480)
+        .frame(width: 450, height: 540)
         .background(CyberTheme.background)
         .onAppear {
             title = event.title ?? ""
             startDate = event.startDate
             endDate = event.endDate
             isAllDay = event.isAllDay
+            location = event.location ?? ""
             notes = event.notes ?? ""
         }
         .alert("DELETE_EVENT?", isPresented: $showDeleteConfirm) {
@@ -709,6 +740,7 @@ struct EditEventSheet: View {
         event.startDate = startDate
         event.endDate = isAllDay ? Calendar.current.date(byAdding: .day, value: 1, to: startDate) ?? endDate : endDate
         event.isAllDay = isAllDay
+        event.location = location.isEmpty ? nil : location
         event.notes = notes.isEmpty ? nil : notes
 
         do {
