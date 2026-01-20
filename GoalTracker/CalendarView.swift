@@ -13,14 +13,19 @@ struct IdentifiableEvent: Identifiable {
     }
 }
 
+// Wrapper to pass date to sheet(item:)
+struct IdentifiableDate: Identifiable {
+    let id = UUID()
+    let date: Date
+}
+
 struct CalendarView: View {
     let weekStart: Date
     @ObservedObject var calendarService: CalendarService
     @State private var events: [EKEvent] = []
     @State private var hoveredEventId: String?
     @State private var eventToEdit: IdentifiableEvent?
-    @State private var showAddEvent = false
-    @State private var addEventDate: Date = Date()
+    @State private var addEventDate: IdentifiableDate?
     @State private var currentTime = Date()
     @State private var isRefreshing = false
 
@@ -109,8 +114,24 @@ struct CalendarView: View {
                 loadEvents()
             }
         }
-        .sheet(isPresented: $showAddEvent) {
-            AddEventSheet(selectedDate: addEventDate, calendarService: calendarService)
+        .overlay {
+            if let dateWrapper = addEventDate {
+                ZStack {
+                    // Dimmed background - tap to dismiss
+                    Color.black.opacity(0.5)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            addEventDate = nil
+                        }
+
+                    // Modal content
+                    AddEventSheet(selectedDate: dateWrapper.date, calendarService: calendarService, onDismiss: {
+                        addEventDate = nil
+                    })
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .animation(.easeOut(duration: 0.2), value: addEventDate != nil)
+            }
         }
     }
 
@@ -317,8 +338,7 @@ struct CalendarView: View {
 
             // Add event button at bottom of each day
             Button(action: {
-                addEventDate = date
-                showAddEvent = true
+                addEventDate = IdentifiableDate(date: date)
             }) {
                 HStack(spacing: 4) {
                     Image(systemName: "plus")
@@ -392,31 +412,33 @@ struct CalendarView: View {
         let eventColor = Color(nsColor: event.calendarColor)
         let opacity: Double = isPast ? 0.5 : 1.0
 
-        return VStack(alignment: .leading, spacing: 3) {
+        return VStack(alignment: .leading, spacing: 5) {
             Text(event.formattedStartTime.uppercased())
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundColor(eventColor.opacity(opacity))
 
             Text(event.title ?? "UNTITLED")
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundColor(isPast ? CyberTheme.textSecondary : CyberTheme.textPrimary)
                 .strikethrough(isPast, color: CyberTheme.textSecondary.opacity(0.5))
-                .lineLimit(2)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
 
             // Show location if available
             if let location = event.location, !location.isEmpty {
-                HStack(spacing: 3) {
+                HStack(alignment: .top, spacing: 4) {
                     Image(systemName: "mappin")
-                        .font(.system(size: 7, weight: .medium, design: .monospaced))
-                    Text(location)
-                        .font(.system(size: 8, design: .monospaced))
-                        .lineLimit(1)
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    Text(cleanLocation(location))
+                        .font(.system(size: 10, design: .monospaced))
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .foregroundColor(CyberTheme.textSecondary.opacity(opacity * 0.8))
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 4)
@@ -562,6 +584,31 @@ struct CalendarView: View {
             event.startDate < endOfDay && event.endDate > startOfDay
         }.sorted { $0.startDate < $1.startDate }
     }
+
+    private func cleanLocation(_ location: String) -> String {
+        var cleaned = location
+
+        // Remove country names
+        let countries = [", United States", ", USA", ", US", ", Canada", ", UK", ", United Kingdom"]
+        for country in countries {
+            cleaned = cleaned.replacingOccurrences(of: country, with: "", options: .caseInsensitive)
+        }
+
+        // Remove zip codes (5 digits, optionally with -4 extension)
+        cleaned = cleaned.replacingOccurrences(
+            of: #",?\s*\d{5}(-\d{4})?"#,
+            with: "",
+            options: .regularExpression
+        )
+
+        // Clean up any trailing commas or extra spaces
+        cleaned = cleaned.trimmingCharacters(in: .whitespaces)
+        if cleaned.hasSuffix(",") {
+            cleaned = String(cleaned.dropLast()).trimmingCharacters(in: .whitespaces)
+        }
+
+        return cleaned
+    }
 }
 
 // MARK: - Edit Event Sheet
@@ -596,15 +643,17 @@ struct EditEventSheet: View {
 
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .foregroundColor(CyberTheme.textSecondary)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
                         .background(
                             RoundedRectangle(cornerRadius: 4)
                                 .stroke(CyberTheme.gridLine, lineWidth: 1)
                         )
                 }
                 .buttonStyle(.plain)
+                .keyboardShortcut(.escape, modifiers: [])
                 .onHover { hovering in
                     if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                 }
@@ -665,17 +714,38 @@ struct EditEventSheet: View {
                             .stroke(CyberTheme.gridLine, lineWidth: 1)
                     )
 
-                    // Date/Time
-                    HStack(spacing: 16) {
+                    // Date/Time - Improved UI
+                    VStack(alignment: .leading, spacing: 12) {
+                        // Start Date & Time
                         VStack(alignment: .leading, spacing: 8) {
                             Text("> START:")
                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                                 .foregroundColor(CyberTheme.textSecondary)
 
-                            DatePicker("", selection: $startDate, displayedComponents: isAllDay ? .date : [.date, .hourAndMinute])
-                                .datePickerStyle(.field)
-                                .labelsHidden()
-                                .colorScheme(.dark)
+                            HStack(spacing: 12) {
+                                DatePicker("", selection: $startDate, displayedComponents: .date)
+                                    .datePickerStyle(.compact)
+                                    .labelsHidden()
+                                    .colorScheme(.dark)
+                                    .accentColor(CyberTheme.neonCyan)
+
+                                if !isAllDay {
+                                    DatePicker("", selection: $startDate, displayedComponents: .hourAndMinute)
+                                        .datePickerStyle(.compact)
+                                        .labelsHidden()
+                                        .colorScheme(.dark)
+                                        .accentColor(CyberTheme.neonCyan)
+                                }
+                            }
+                            .padding(10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(CyberTheme.cardBackground)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(CyberTheme.neonCyan.opacity(0.3), lineWidth: 1)
+                            )
                         }
 
                         if !isAllDay {
@@ -684,11 +754,34 @@ struct EditEventSheet: View {
                                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                                     .foregroundColor(CyberTheme.textSecondary)
 
-                                DatePicker("", selection: $endDate, displayedComponents: [.date, .hourAndMinute])
-                                    .datePickerStyle(.field)
-                                    .labelsHidden()
-                                    .colorScheme(.dark)
+                                HStack(spacing: 12) {
+                                    DatePicker("", selection: $endDate, in: startDate..., displayedComponents: .date)
+                                        .datePickerStyle(.compact)
+                                        .labelsHidden()
+                                        .colorScheme(.dark)
+                                        .accentColor(CyberTheme.matrixGreen)
+
+                                    DatePicker("", selection: $endDate, displayedComponents: .hourAndMinute)
+                                        .datePickerStyle(.compact)
+                                        .labelsHidden()
+                                        .colorScheme(.dark)
+                                        .accentColor(CyberTheme.matrixGreen)
+                                }
+                                .padding(10)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(CyberTheme.cardBackground)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(CyberTheme.matrixGreen.opacity(0.3), lineWidth: 1)
+                                )
                             }
+                        }
+                    }
+                    .onChange(of: startDate) { newStart in
+                        if endDate <= newStart {
+                            endDate = Calendar.current.date(byAdding: .hour, value: 1, to: newStart) ?? newStart
                         }
                     }
 

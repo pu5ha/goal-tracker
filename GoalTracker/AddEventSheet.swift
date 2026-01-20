@@ -4,7 +4,16 @@ import EventKit
 struct AddEventSheet: View {
     let selectedDate: Date
     @ObservedObject var calendarService: CalendarService
-    @Environment(\.dismiss) private var dismiss
+    var onDismiss: (() -> Void)?
+    @Environment(\.dismiss) private var environmentDismiss
+
+    private func dismiss() {
+        if let onDismiss = onDismiss {
+            onDismiss()
+        } else {
+            environmentDismiss()
+        }
+    }
 
     @State private var title = ""
     @State private var startDate: Date
@@ -17,9 +26,10 @@ struct AddEventSheet: View {
     @State private var errorMessage = ""
     @FocusState private var isTitleFocused: Bool
 
-    init(selectedDate: Date, calendarService: CalendarService) {
+    init(selectedDate: Date, calendarService: CalendarService, onDismiss: (() -> Void)? = nil) {
         self.selectedDate = selectedDate
         self.calendarService = calendarService
+        self.onDismiss = onDismiss
 
         let calendar = Calendar.current
         var components = calendar.dateComponents([.year, .month, .day], from: selectedDate)
@@ -48,15 +58,20 @@ struct AddEventSheet: View {
 
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .foregroundColor(CyberTheme.textSecondary)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
                         .background(
                             RoundedRectangle(cornerRadius: 4)
                                 .stroke(CyberTheme.gridLine, lineWidth: 1)
                         )
                 }
                 .buttonStyle(.plain)
+                .keyboardShortcut(.escape, modifiers: [])
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
             }
             .padding(20)
             .background(CyberTheme.cardBackground)
@@ -116,30 +131,80 @@ struct AddEventSheet: View {
                             .stroke(CyberTheme.gridLine, lineWidth: 1)
                     )
 
-                    // Date/Time
-                    HStack(spacing: 16) {
+                    // Date/Time - Improved UI
+                    VStack(alignment: .leading, spacing: 12) {
+                        // Start Date & Time
                         VStack(alignment: .leading, spacing: 8) {
                             Text("> START:")
                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                                 .foregroundColor(CyberTheme.textSecondary)
 
-                            DatePicker("", selection: $startDate, displayedComponents: isAllDay ? .date : [.date, .hourAndMinute])
-                                .datePickerStyle(.field)
-                                .labelsHidden()
-                                .colorScheme(.dark)
+                            HStack(spacing: 12) {
+                                // Date picker
+                                DatePicker("", selection: $startDate, displayedComponents: .date)
+                                    .datePickerStyle(.compact)
+                                    .labelsHidden()
+                                    .colorScheme(.dark)
+                                    .accentColor(CyberTheme.neonCyan)
+
+                                if !isAllDay {
+                                    // Time picker
+                                    DatePicker("", selection: $startDate, displayedComponents: .hourAndMinute)
+                                        .datePickerStyle(.compact)
+                                        .labelsHidden()
+                                        .colorScheme(.dark)
+                                        .accentColor(CyberTheme.neonCyan)
+                                }
+                            }
+                            .padding(10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(CyberTheme.cardBackground)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(CyberTheme.neonCyan.opacity(0.3), lineWidth: 1)
+                            )
                         }
 
                         if !isAllDay {
+                            // End Date & Time
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("> END:")
                                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                                     .foregroundColor(CyberTheme.textSecondary)
 
-                                DatePicker("", selection: $endDate, displayedComponents: [.date, .hourAndMinute])
-                                    .datePickerStyle(.field)
-                                    .labelsHidden()
-                                    .colorScheme(.dark)
+                                HStack(spacing: 12) {
+                                    // Date picker
+                                    DatePicker("", selection: $endDate, in: startDate..., displayedComponents: .date)
+                                        .datePickerStyle(.compact)
+                                        .labelsHidden()
+                                        .colorScheme(.dark)
+                                        .accentColor(CyberTheme.matrixGreen)
+
+                                    // Time picker
+                                    DatePicker("", selection: $endDate, displayedComponents: .hourAndMinute)
+                                        .datePickerStyle(.compact)
+                                        .labelsHidden()
+                                        .colorScheme(.dark)
+                                        .accentColor(CyberTheme.matrixGreen)
+                                }
+                                .padding(10)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(CyberTheme.cardBackground)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(CyberTheme.matrixGreen.opacity(0.3), lineWidth: 1)
+                                )
                             }
+                        }
+                    }
+                    .onChange(of: startDate) { newStart in
+                        // Keep end date at least 30 min after start
+                        if endDate <= newStart {
+                            endDate = Calendar.current.date(byAdding: .hour, value: 1, to: newStart) ?? newStart
                         }
                     }
 
@@ -227,7 +292,9 @@ struct AddEventSheet: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .keyboardShortcut(.escape, modifiers: [])
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
 
                 Spacer()
 
