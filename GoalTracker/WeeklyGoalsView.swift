@@ -3,12 +3,11 @@ import UniformTypeIdentifiers
 
 struct WeeklyGoalsView: View {
     let weekStart: Date
+    @Binding var addGoalForCategory: GoalCategory?
     @ObservedObject private var dataService = DataService.shared
     @State private var editingGoal: Goal?
     @State private var editText = ""
     @State private var hoveredGoalId: UUID?
-    @State private var showAddGoal = false
-    @State private var addGoalCategory: GoalCategory = .personal
     @State private var expandedGoalIds: Set<UUID> = []
     @State private var editingNotesGoal: Goal?
     @State private var notesText = ""
@@ -71,9 +70,6 @@ struct WeeklyGoalsView: View {
         }
         .background(CyberTheme.background)
         .id(dataService.refreshTrigger)
-        .sheet(isPresented: $showAddGoal) {
-            AddGoalSheet(weekStart: weekStart, initialCategory: addGoalCategory)
-        }
     }
 
     @ViewBuilder
@@ -104,15 +100,13 @@ struct WeeklyGoalsView: View {
 
                 // Add button for this category with hover glow
                 AddCategoryButton(category: category, color: categoryColor(category)) {
-                    addGoalCategory = category
-                    showAddGoal = true
+                    addGoalForCategory = category
                 }
             }
 
             if goals.isEmpty {
                 Button(action: {
-                    addGoalCategory = category
-                    showAddGoal = true
+                    addGoalForCategory = category
                 }) {
                     HStack {
                         Spacer()
@@ -273,14 +267,6 @@ struct WeeklyGoalsView: View {
                 VStack(alignment: .trailing, spacing: 4) {
                     // Top row: Active button + Delete
                     HStack(spacing: 6) {
-                        // Rolled over indicator
-                        if goal.rolledOverFrom != nil {
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                .foregroundColor(CyberTheme.neonYellow.opacity(0.7))
-                                .help("ROLLED_OVER")
-                        }
-
                         // Notes indicator/button
                         Button(action: { toggleExpanded(goal) }) {
                             Image(systemName: goal.hasNotes ? "note.text" : "note.text.badge.plus")
@@ -876,7 +862,7 @@ struct AddCategoryButton: View {
             Image(systemName: "plus")
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundColor(color)
-                .frame(width: 20, height: 20)
+                .frame(width: 24, height: 24)
                 .background(
                     RoundedRectangle(cornerRadius: 4)
                         .fill(isHovered ? color.opacity(0.15) : Color.clear)
@@ -887,6 +873,7 @@ struct AddCategoryButton: View {
                 )
                 .shadow(color: isHovered ? color.opacity(0.5) : Color.clear, radius: 4, x: 0, y: 0)
                 .scaleEffect(isHovered ? 1.1 : 1.0)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .animation(.easeOut(duration: 0.15), value: isHovered)

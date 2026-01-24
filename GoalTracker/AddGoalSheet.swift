@@ -3,6 +3,7 @@ import SwiftUI
 struct AddGoalSheet: View {
     let weekStart: Date
     let initialCategory: GoalCategory
+    var onDismiss: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var dataService = DataService.shared
 
@@ -14,9 +15,10 @@ struct AddGoalSheet: View {
     @State private var dueDate = Date()
     @FocusState private var isTitleFocused: Bool
 
-    init(weekStart: Date, initialCategory: GoalCategory = .personal) {
+    init(weekStart: Date, initialCategory: GoalCategory = .personal, onDismiss: (() -> Void)? = nil) {
         self.weekStart = weekStart
         self.initialCategory = initialCategory
+        self.onDismiss = onDismiss
         self._selectedCategory = State(initialValue: initialCategory)
     }
 
@@ -35,7 +37,10 @@ struct AddGoalSheet: View {
 
                 Spacer()
 
-                Button(action: { dismiss() }) {
+                Button(action: {
+                    onDismiss?()
+                    dismiss()
+                }) {
                     Image(systemName: "xmark")
                         .font(.system(size: 12, weight: .bold, design: .monospaced))
                         .foregroundColor(CyberTheme.textSecondary)
@@ -211,7 +216,10 @@ struct AddGoalSheet: View {
 
             // Footer
             HStack {
-                Button(action: { dismiss() }) {
+                Button(action: {
+                    onDismiss?()
+                    dismiss()
+                }) {
                     Text("[CANCEL]")
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundColor(CyberTheme.textSecondary)
@@ -285,8 +293,12 @@ struct AddGoalSheet: View {
                     .stroke(isSelected ? Color.clear : CyberTheme.gridLine, lineWidth: 1)
             )
             .shadow(color: isSelected ? color.opacity(0.5) : Color.clear, radius: 4, x: 0, y: 0)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
     }
 
     private func categoryColor(_ category: GoalCategory) -> Color {
@@ -306,6 +318,7 @@ struct AddGoalSheet: View {
             notes: notes.isEmpty ? nil : notes,
             dueDate: showDueDate ? dueDate : nil
         )
+        onDismiss?()
         dismiss()
     }
 }

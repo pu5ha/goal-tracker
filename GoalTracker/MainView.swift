@@ -5,7 +5,7 @@ struct MainView: View {
     @ObservedObject private var calendarService = CalendarService.shared
     @ObservedObject private var notificationService = NotificationService.shared
     @State private var selectedWeekStart: Date = WeekService.shared.currentWeekStart
-    @State private var showAddGoal = false
+    @State private var addGoalForCategory: GoalCategory? = nil
     @State private var showAddEvent = false
     @State private var showSettings = false
     @State private var showArchive = false
@@ -38,7 +38,7 @@ struct MainView: View {
                 headerView
 
                 HSplitView {
-                    WeeklyGoalsView(weekStart: selectedWeekStart)
+                    WeeklyGoalsView(weekStart: selectedWeekStart, addGoalForCategory: $addGoalForCategory)
                         .frame(minWidth: 320, idealWidth: 380, maxWidth: 420)
 
                     VStack(spacing: 0) {
@@ -53,15 +53,33 @@ struct MainView: View {
                     .frame(minWidth: 700)
                 }
             }
+
+            // Add Goal overlay (centered in entire app)
+            if let category = addGoalForCategory {
+                Color.black.opacity(0.5)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            addGoalForCategory = nil
+                        }
+                    }
+
+                AddGoalSheet(weekStart: selectedWeekStart, initialCategory: category, onDismiss: {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        addGoalForCategory = nil
+                    }
+                })
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .shadow(color: CyberTheme.matrixGreen.opacity(0.3), radius: 20, x: 0, y: 10)
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
         }
+        .animation(.easeOut(duration: 0.2), value: addGoalForCategory != nil)
         .frame(minWidth: 1050, minHeight: 750)
         .onAppear {
             checkRollover()
             requestCalendarAccess()
             requestNotificationAccess()
-        }
-        .sheet(isPresented: $showAddGoal) {
-            AddGoalSheet(weekStart: selectedWeekStart)
         }
         .sheet(isPresented: $showAddEvent) {
             AddEventSheet(selectedDate: selectedWeekStart, calendarService: calendarService)
@@ -163,7 +181,7 @@ struct MainView: View {
 
             // Action Buttons
             HStack(spacing: 12) {
-                Button(action: { showAddGoal = true }) {
+                Button(action: { addGoalForCategory = .personal }) {
                     HStack(spacing: 6) {
                         Image(systemName: "plus")
                             .font(.system(size: 11, weight: .bold, design: .monospaced))
