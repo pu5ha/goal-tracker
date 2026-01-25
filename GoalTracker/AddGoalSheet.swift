@@ -4,7 +4,6 @@ struct AddGoalSheet: View {
     let weekStart: Date
     let initialCategory: GoalCategory
     var onDismiss: (() -> Void)? = nil
-    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var dataService = DataService.shared
 
     @State private var title = ""
@@ -39,7 +38,6 @@ struct AddGoalSheet: View {
 
                 Button(action: {
                     onDismiss?()
-                    dismiss()
                 }) {
                     Image(systemName: "xmark")
                         .font(.system(size: 12, weight: .bold, design: .monospaced))
@@ -218,7 +216,6 @@ struct AddGoalSheet: View {
             HStack {
                 Button(action: {
                     onDismiss?()
-                    dismiss()
                 }) {
                     Text("[CANCEL]")
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
@@ -319,6 +316,5 @@ struct AddGoalSheet: View {
             dueDate: showDueDate ? dueDate : nil
         )
         onDismiss?()
-        dismiss()
     }
 }
