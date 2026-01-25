@@ -306,11 +306,6 @@ struct CalendarView: View {
                             }
                             .buttonStyle(.plain)
                         }
-
-                        if dayEvents.isEmpty {
-                            currentTimeIndicator
-                            Spacer().frame(height: 10)
-                        }
                     } else {
                         ForEach(dayEvents, id: \.eventIdentifier) { event in
                             Button(action: { eventToEdit = IdentifiableEvent(event) }) {
